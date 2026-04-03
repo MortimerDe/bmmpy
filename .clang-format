@@ -11,3 +11,6 @@ SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
 NamespaceIndentation: None
 AllowShortFunctionsOnASingleLine: All
+AlignAfterOpenBracket: Align
+BinPackArguments: false
+BinPackParameters: false

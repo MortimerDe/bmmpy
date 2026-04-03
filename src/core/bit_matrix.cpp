@@ -134,7 +134,8 @@ bool BitMatrix::get(std::size_t row, std::size_t col) const {
     return get_unchecked(row, col);
 }
 
-void BitMatrix::set_unchecked(std::size_t row, std::size_t col,
+void BitMatrix::set_unchecked(std::size_t row,
+                              std::size_t col,
                               bool value) noexcept {
     const std::size_t word_idx = col / k_word_bits;
     const std::size_t bit_idx = col % k_word_bits;
@@ -151,6 +152,49 @@ bool BitMatrix::get_unchecked(std::size_t row, std::size_t col) const noexcept {
     const std::size_t bit_idx = col % k_word_bits;
     return (row_ptr_unchecked(row)[word_idx] & (std::uint64_t(1) << bit_idx)) !=
            0;
+}
+
+void BitMatrix::row_xor_scalar(std::uint64_t* dst,
+                               const std::uint64_t* src,
+                               std::size_t len) noexcept {
+    for (std::size_t i = 0; i < len; ++i)
+        dst[i] ^= src[i];
+}
+
+std::uint64_t BitMatrix::row_popcount_scalar(const std::uint64_t* src,
+                                             std::size_t len) noexcept {
+    std::uint64_t total = 0;
+    for (std::size_t i = 0; i < len; ++i)
+        total += static_cast<std::uint64_t>(__builtin_popcountll(src[i]));
+    return total;
+}
+
+unsigned BitMatrix::ctz64(std::uint64_t value) noexcept {
+    return static_cast<unsigned>(__builtin_ctzll(value));
+}
+
+void BitMatrix::row_xor(std::size_t target_row,
+                        std::size_t source_row) noexcept {
+    assert(target_row < _rows);
+    assert(source_row < _rows);
+    if (target_row == source_row)
+        return;
+
+    row_xor_scalar(
+        row_ptr_unchecked(target_row), row_ptr_unchecked(source_row), _stride);
+}
+
+void BitMatrix::row_xor_from(std::size_t target_row,
+                             const BitMatrix& source,
+                             std::size_t source_row) {
+    if (target_row >= _rows || source_row >= source._rows)
+        throw std::out_of_range("row out of bounds");
+    if (_cols != source._cols || _stride != source._stride)
+        throw MatrixError(MatrixErr::DimensionMismatch);
+
+    row_xor_scalar(row_ptr_unchecked(target_row),
+                   source.row_ptr_unchecked(source_row),
+                   _stride);
 }
 
 BitMatrix& BitMatrix::operator=(BitMatrix&& other) noexcept {
