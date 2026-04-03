@@ -197,6 +197,147 @@ void BitMatrix::row_xor_from(std::size_t target_row,
                    _stride);
 }
 
+BitMatrix BitMatrix::identity(std::size_t n) {
+    BitMatrix result(n, n);
+    for (std::size_t i = 0; i < n; ++i)
+        result.set_unchecked(i, i, true);
+    return result;
+}
+
+BitMatrix BitMatrix::extract_rows_by_indices(
+    const std::vector<std::size_t>& indices) const {
+    BitMatrix result(indices.size(), _cols);
+    for (std::size_t dst = 0; dst < indices.size(); ++dst) {
+        const std::size_t src = indices[dst];
+        if (src >= _rows)
+            throw std::out_of_range("source row out of bounds");
+        std::memcpy(result.row_ptr_unchecked(dst),
+                    row_ptr_unchecked(src),
+                    _stride * sizeof(std::uint64_t));
+    }
+    return result;
+}
+
+void BitMatrix::insert_rows_by_indices(
+    const BitMatrix& source, const std::vector<std::size_t>& indices) {
+    if (source._rows != indices.size())
+        throw MatrixError(MatrixErr::DimensionMismatch);
+    if (_cols != source._cols || _stride != source._stride)
+        throw MatrixError(MatrixErr::DimensionMismatch);
+
+    for (std::size_t src = 0; src < indices.size(); ++src) {
+        const std::size_t dst = indices[src];
+        if (dst >= _rows)
+            throw std::out_of_range("target row out of bounds");
+        std::memcpy(row_ptr_unchecked(dst),
+                    source.row_ptr_unchecked(src),
+                    _stride * sizeof(std::uint64_t));
+    }
+}
+
+BitMatrix BitMatrix::add(const BitMatrix& other) const {
+    if (_rows != other._rows || _cols != other._cols)
+        throw MatrixError(MatrixErr::DimensionMismatch);
+
+    BitMatrix result(*this);
+    for (std::size_t r = 0; r < _rows; ++r)
+        result.row_xor_from(r, other, r);
+    return result;
+}
+
+BitMatrix BitMatrix::mul(const BitMatrix& other) const {
+    if (_cols != other._rows)
+        throw MatrixError(MatrixErr::DimensionMismatch);
+
+    BitMatrix result(_rows, other._cols);
+    const std::size_t used_words = words_per_row();
+
+    for (std::size_t i = 0; i < _rows; ++i) {
+        const std::uint64_t* lhs = row_ptr_unchecked(i);
+
+        for (std::size_t word_idx = 0; word_idx < used_words; ++word_idx) {
+            std::uint64_t bits = lhs[word_idx];
+            while (bits != 0) {
+                const unsigned bit = ctz64(bits);
+                const std::size_t k = word_idx * k_word_bits + bit;
+                if (k < _cols)
+                    result.row_xor_from(i, other, k);
+                bits &= (bits - 1);
+            }
+        }
+    }
+
+    return result;
+}
+
+BitMatrix BitMatrix::power(std::uint32_t exp) const {
+    if (_rows != _cols)
+        throw MatrixError(MatrixErr::DimensionMismatch);
+
+    BitMatrix result = identity(_rows);
+    BitMatrix base(*this);
+
+    while (exp != 0) {
+        if ((exp & 1u) != 0)
+            result = result.mul(base);
+        exp >>= 1u;
+        if (exp != 0)
+            base = base.mul(base);
+    }
+
+    return result;
+}
+
+std::uint64_t BitMatrix::row_popcount(std::size_t row) const {
+    if (row >= _rows)
+        throw std::out_of_range("row out of bounds");
+    return row_popcount_scalar(row_ptr_unchecked(row), words_per_row());
+}
+
+std::uint64_t BitMatrix::weight() const {
+    std::uint64_t total = 0;
+    for (std::size_t r = 0; r < _rows; ++r)
+        total += row_popcount(r);
+    return total;
+}
+
+void BitMatrix::swap_rows(std::size_t r1, std::size_t r2) noexcept {
+    assert(r1 < _rows);
+    assert(r2 < _rows);
+    if (r1 == r2)
+        return;
+
+    std::uint64_t* a = row_ptr_unchecked(r1);
+    std::uint64_t* b = row_ptr_unchecked(r2);
+    for (std::size_t i = 0; i < _stride; ++i)
+        std::swap(a[i], b[i]);
+}
+
+std::size_t BitMatrix::rank() const {
+    BitMatrix temp(*this);
+    std::size_t rank_value = 0;
+
+    for (std::size_t c = 0; c < _cols && rank_value < _rows; ++c) {
+        std::size_t pivot = rank_value;
+        while (pivot < _rows && !temp.get_unchecked(pivot, c))
+            ++pivot;
+
+        if (pivot == _rows)
+            continue;
+
+        temp.swap_rows(rank_value, pivot);
+
+        for (std::size_t r = rank_value + 1; r < _rows; ++r) {
+            if (temp.get_unchecked(r, c))
+                temp.row_xor(r, rank_value);
+        }
+
+        ++rank_value;
+    }
+
+    return rank_value;
+}
+
 BitMatrix& BitMatrix::operator=(BitMatrix&& other) noexcept {
     if (this == &other)
         return *this;
