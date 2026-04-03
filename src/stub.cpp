@@ -2,6 +2,6 @@
 
 namespace bmmpy
 {
-    std::string get_version() { return "0.0.1"; }
+    std::string get_version() { return BMMPY_VERSION; }
     int add(int a, int b) { return a + b; }
 }

@@ -23,3 +23,10 @@ target_link_libraries(bmmpy PRIVATE bmmpy_core)
 
 add_executable(cli src/cli.cpp) 
 target_link_libraries(cli PRIVATE bmmpy_core)
+
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENT)
+
+string(REGEX MATCH "version = \"([^\"]+)\"" _ ${PYPROJECT_CONTENT})
+set(BMMPY_VERSION ${CMAKE_MATCH_1})
+
+target_compile_definitions(bmmpy_core PUBLIC BMMPY_VERSION="${BMMPY_VERSION}")
