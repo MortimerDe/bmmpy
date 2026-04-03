@@ -9,6 +9,9 @@ add_library(bmmpy_core STATIC
 )
 target_include_directories(bmmpy_core PUBLIC include)
 
+find_package(OpenMP REQUIRED)
+target_link_libraries(bmmpy_core PUBLIC OpenMP::OpenMP_CXX)
+
 find_package(Python 3.9 COMPONENTS Interpreter Development.Module REQUIRED)
 
 add_subdirectory(extern/nanobind)
