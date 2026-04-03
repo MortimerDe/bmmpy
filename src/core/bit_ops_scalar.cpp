@@ -1,4 +1,4 @@
-#include "bmmpy/core/bit_ops.hpp"
+#include "bmmpy/core/detail/bit_ops.hpp"
 
 namespace bmmpy::detail {
 
