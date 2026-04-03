@@ -103,6 +103,56 @@ BitMatrix::BitMatrix(BitMatrix&& other) noexcept
     other._total_words = 0;
 }
 
+void BitMatrix::copy_from_words(const std::uint64_t* src, std::size_t count) {
+    if (count != _total_words)
+        throw MatrixError(MatrixErr::DimensionMismatch);
+    if (count != 0)
+        std::memcpy(_data, src, total_bytes());
+}
+
+const std::uint64_t* BitMatrix::row_words(std::size_t row) const {
+    if (row >= _rows)
+        throw std::out_of_range("row out of bounds");
+    return row_ptr_unchecked(row);
+}
+
+std::uint64_t* BitMatrix::row_words(std::size_t row) {
+    if (row >= _rows)
+        throw std::out_of_range("row out of bounds");
+    return row_ptr_unchecked(row);
+}
+
+void BitMatrix::set(std::size_t row, std::size_t col, bool value) {
+    if (row >= _rows || col >= _cols)
+        throw std::out_of_range("index out of bounds");
+    set_unchecked(row, col, value);
+}
+
+bool BitMatrix::get(std::size_t row, std::size_t col) const {
+    if (row >= _rows || col >= _cols)
+        throw std::out_of_range("index out of bounds");
+    return get_unchecked(row, col);
+}
+
+void BitMatrix::set_unchecked(std::size_t row, std::size_t col,
+                              bool value) noexcept {
+    const std::size_t word_idx = col / k_word_bits;
+    const std::size_t bit_idx = col % k_word_bits;
+    std::uint64_t& word = row_ptr_unchecked(row)[word_idx];
+    const std::uint64_t mask = std::uint64_t(1) << bit_idx;
+    if (value)
+        word |= mask;
+    else
+        word &= ~mask;
+}
+
+bool BitMatrix::get_unchecked(std::size_t row, std::size_t col) const noexcept {
+    const std::size_t word_idx = col / k_word_bits;
+    const std::size_t bit_idx = col % k_word_bits;
+    return (row_ptr_unchecked(row)[word_idx] & (std::uint64_t(1) << bit_idx)) !=
+           0;
+}
+
 BitMatrix& BitMatrix::operator=(BitMatrix&& other) noexcept {
     if (this == &other)
         return *this;

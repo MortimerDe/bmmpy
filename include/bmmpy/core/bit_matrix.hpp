@@ -49,6 +49,7 @@ public:
     void copy_from_words(const std::uint64_t* src, std::size_t count);
 
     const std::uint64_t* row_words(std::size_t row) const;
+    std::uint64_t* row_words(std::size_t row);
 
     void set(std::size_t row, std::size_t col, bool value);
     bool get(std::size_t row, std::size_t col) const;
