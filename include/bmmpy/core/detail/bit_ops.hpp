@@ -38,6 +38,9 @@ void row_xor_avx2(std::uint64_t* dst,
                   const std::uint64_t* src,
                   std::size_t len) noexcept;
 
+std::uint64_t row_popcount_avx2(const std::uint64_t* src,
+                                std::size_t len) noexcept;
+
 void row_swap_avx2(std::uint64_t* a,
                    std::uint64_t* b,
                    std::size_t len) noexcept;

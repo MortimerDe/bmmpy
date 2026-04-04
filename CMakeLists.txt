@@ -10,15 +10,15 @@ target_sources(
     PRIVATE
         src/stub.cpp
         src/core/bit_matrix.cpp
-        # src/core/bit_ops_scalar.cpp
-        # src/core/bit_ops_dispatch.cpp
+        src/core/bit_ops_scalar.cpp
+        src/core/bit_ops_dispatch.cpp
 )
 
 target_include_directories(bmmpy_core PUBLIC include)
 
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" BMMPY_ARCH)
 if(BMMPY_ARCH MATCHES "^(x86_64|amd64|i[3-6]86)$")
-    # target_sources(bmmpy_core PRIVATE src/core/bit_ops_avx2.cpp)
+    target_sources(bmmpy_core PRIVATE src/core/bit_ops_avx2.cpp)
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_AVX2_BACKEND=1)
 
     if(MSVC)

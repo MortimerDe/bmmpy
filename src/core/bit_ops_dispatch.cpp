@@ -27,6 +27,7 @@ const BitOps& bit_ops() noexcept {
         if (cpu_supports_avx2()) {
             selected.row_xor = &row_xor_avx2;
             selected.row_swap = &row_swap_avx2;
+            selected.row_popcount = &row_popcount_avx2;
         }
 #endif
         return selected;
