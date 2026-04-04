@@ -3,6 +3,7 @@ project(bmmpy LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CTest)
 
 add_library(bmmpy_core STATIC)
 target_sources(
@@ -48,6 +49,12 @@ nanobind_add_module(
 )
 
 target_link_libraries(bmmpy PRIVATE bmmpy_core)
+
+if(BUILD_TESTING)
+    add_executable(bit_matrix_tests tests/bit_matrix_tests.cpp)
+    target_link_libraries(bit_matrix_tests PRIVATE bmmpy_core)
+    add_test(NAME bit_matrix_tests COMMAND bit_matrix_tests)
+endif()
 
 add_executable(cli src/cli.cpp)
 target_link_libraries(cli PRIVATE bmmpy_core)
