@@ -96,11 +96,11 @@ private:
         return _data + row * _stride;
     }
 
-    static void row_xor_scalar(std::uint64_t* dst,
-                               const std::uint64_t* src,
-                               std::size_t len) noexcept;
-    static std::uint64_t row_popcount_scalar(const std::uint64_t* src,
-                                             std::size_t len) noexcept;
+    // static void row_xor_scalar(std::uint64_t* dst,
+    //                            const std::uint64_t* src,
+    //                            std::size_t len) noexcept;
+    // static std::uint64_t row_popcount_scalar(const std::uint64_t* src,
+    //                                          std::size_t len) noexcept;
     static unsigned ctz64(std::uint64_t value) noexcept; // Count Trailing Zeros
 
     // fields

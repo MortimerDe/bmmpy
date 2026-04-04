@@ -1,5 +1,7 @@
 #include "bmmpy/core/bit_matrix.hpp"
 
+#include "bmmpy/core/detail/bit_ops.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -154,21 +156,6 @@ bool BitMatrix::get_unchecked(std::size_t row, std::size_t col) const noexcept {
            0;
 }
 
-void BitMatrix::row_xor_scalar(std::uint64_t* dst,
-                               const std::uint64_t* src,
-                               std::size_t len) noexcept {
-    for (std::size_t i = 0; i < len; ++i)
-        dst[i] ^= src[i];
-}
-
-std::uint64_t BitMatrix::row_popcount_scalar(const std::uint64_t* src,
-                                             std::size_t len) noexcept {
-    std::uint64_t total = 0;
-    for (std::size_t i = 0; i < len; ++i)
-        total += static_cast<std::uint64_t>(__builtin_popcountll(src[i]));
-    return total;
-}
-
 unsigned BitMatrix::ctz64(std::uint64_t value) noexcept {
     return static_cast<unsigned>(__builtin_ctzll(value));
 }
@@ -180,7 +167,7 @@ void BitMatrix::row_xor(std::size_t target_row,
     if (target_row == source_row)
         return;
 
-    row_xor_scalar(
+    detail::bit_ops().row_xor(
         row_ptr_unchecked(target_row), row_ptr_unchecked(source_row), _stride);
 }
 
@@ -192,9 +179,9 @@ void BitMatrix::row_xor_from(std::size_t target_row,
     if (_cols != source._cols || _stride != source._stride)
         throw MatrixError(MatrixErr::DimensionMismatch);
 
-    row_xor_scalar(row_ptr_unchecked(target_row),
-                   source.row_ptr_unchecked(source_row),
-                   _stride);
+    detail::bit_ops().row_xor(row_ptr_unchecked(target_row),
+                              source.row_ptr_unchecked(source_row),
+                              _stride);
 }
 
 BitMatrix BitMatrix::identity(std::size_t n) {
@@ -291,7 +278,8 @@ BitMatrix BitMatrix::power(std::uint32_t exp) const {
 std::uint64_t BitMatrix::row_popcount(std::size_t row) const {
     if (row >= _rows)
         throw std::out_of_range("row out of bounds");
-    return row_popcount_scalar(row_ptr_unchecked(row), words_per_row());
+    return detail::bit_ops().row_popcount(row_ptr_unchecked(row),
+                                          words_per_row());
 }
 
 std::uint64_t BitMatrix::weight() const {
@@ -307,10 +295,8 @@ void BitMatrix::swap_rows(std::size_t r1, std::size_t r2) noexcept {
     if (r1 == r2)
         return;
 
-    std::uint64_t* a = row_ptr_unchecked(r1);
-    std::uint64_t* b = row_ptr_unchecked(r2);
-    for (std::size_t i = 0; i < _stride; ++i)
-        std::swap(a[i], b[i]);
+    detail::bit_ops().row_swap(
+        row_ptr_unchecked(r1), row_ptr_unchecked(r2), _stride);
 }
 
 std::size_t BitMatrix::rank() const {
