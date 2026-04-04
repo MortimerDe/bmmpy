@@ -44,7 +44,7 @@ add_subdirectory(extern/nanobind)
 nanobind_add_module(
     bmmpy
     NB_DOMAIN bmmpy
-    [main.cpp](http://_vscodecontentref_/6)
+    python/bindings/main.cpp
 )
 
 target_link_libraries(bmmpy PRIVATE bmmpy_core)
