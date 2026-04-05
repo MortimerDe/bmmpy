@@ -13,23 +13,35 @@ target_sources(
         src/core/bit_matrix.cpp
         src/core/bit_ops_scalar.cpp
         src/core/bit_ops_dispatch.cpp
+
+        src/math/comb.cpp
+        src/math/fwht.cpp
+        src/math/fwht_scalar.cpp
+        src/math/fwht_dispatch.cpp
 )
 
 target_include_directories(bmmpy_core PUBLIC include)
 
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" BMMPY_ARCH)
 if(BMMPY_ARCH MATCHES "^(x86_64|amd64|i[3-6]86)$")
-    target_sources(bmmpy_core PRIVATE src/core/bit_ops_avx2.cpp)
+    target_sources(
+        bmmpy_core
+        PRIVATE
+        src/core/bit_ops_avx2.cpp
+        src/math/fwht_avx2.cpp
+    )
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_AVX2_BACKEND=1)
 
     if(MSVC)
         set_source_files_properties(
             src/core/bit_ops_avx2.cpp
+            src/math/fwht_avx2.cpp
             PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
         )
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         set_source_files_properties(
             src/core/bit_ops_avx2.cpp
+            src/math/fwht_avx2.cpp
             PROPERTIES COMPILE_OPTIONS "-mavx2"
         )
     endif()
@@ -54,6 +66,10 @@ if(BUILD_TESTING)
     add_executable(bit_matrix_tests tests/bit_matrix_tests.cpp)
     target_link_libraries(bit_matrix_tests PRIVATE bmmpy_core)
     add_test(NAME bit_matrix_tests COMMAND bit_matrix_tests)
+
+    add_executable(math_tests tests/math_tests.cpp)
+    target_link_libraries(math_tests PRIVATE bmmpy_core)
+    add_test(NAME math_tests COMMAND math_tests)
 endif()
 
 add_executable(cli src/cli.cpp)
