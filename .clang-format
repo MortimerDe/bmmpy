@@ -3,11 +3,14 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 100
+ColumnLimit: 80
 BreakBeforeBraces: Attach
-AllowShortFunctionsOnASingleLine: Empty
 AccessModifierOffset: -4
 PointerAlignment: Left
 SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
 NamespaceIndentation: None
+AllowShortFunctionsOnASingleLine: All
+AlignAfterOpenBracket: Align
+BinPackArguments: false
+BinPackParameters: false
