@@ -18,6 +18,8 @@ target_sources(
         src/math/fwht.cpp
         src/math/fwht_scalar.cpp
         src/math/fwht_dispatch.cpp
+
+        src/greedy_selection.cpp
 )
 
 target_include_directories(bmmpy_core PUBLIC include)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "bmmpy/core/detail/bit_intrinsics.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -45,7 +47,7 @@ struct Candidate {
             }
 
             value_type operator*() const noexcept {
-                return _base + static_cast<value_type>(ctz64(_current));
+                return _base + static_cast<value_type>(detail::ctz64(_current));
             }
 
             iterator& operator++() noexcept {
@@ -76,16 +78,6 @@ struct Candidate {
             }
 
         private:
-            static unsigned ctz64(word_type value) noexcept {
-#if defined(_MSC_VER)
-                unsigned long index = 0;
-                _BitScanForward64(&index, value);
-                return static_cast<unsigned>(index);
-#else
-                return static_cast<unsigned>(__builtin_ctzll(value));
-#endif
-            }
-
             void skip_empty_words() noexcept {
                 while (_words != nullptr && _word_idx < _words->size() &&
                        _current == 0) {
@@ -158,11 +150,7 @@ struct Candidate {
     std::uint32_t mask_popcount() const noexcept {
         std::uint32_t total = 0;
         for (word_type word : mask) {
-#if defined(_MSC_VER)
-            total += static_cast<std::uint32_t>(__popcnt64(word));
-#else
-            total += static_cast<std::uint32_t>(__builtin_popcountll(word));
-#endif
+            total += detail::popcount64(word);
         }
         return total;
     }
