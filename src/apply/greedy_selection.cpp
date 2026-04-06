@@ -1,4 +1,4 @@
-#include "bmmpy/greedy_selection.hpp"
+#include "bmmpy/apply/greedy_selection.hpp"
 
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
 
