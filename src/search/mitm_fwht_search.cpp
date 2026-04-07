@@ -98,4 +98,142 @@ void MitmFwhtSearch::ensure_capacity(std::size_t cols, std::size_t t_left, std::
     }
 }
 
+std::pair<std::size_t, std::int32_t>
+MitmFwhtSearch::prepare_columns(const std::vector<const std::uint64_t*>& rows,
+                                std::size_t words_per_row,
+                                std::size_t cols,
+                                std::size_t t_left) {
+    const std::size_t t = rows.size();
+    const std::size_t t_right = t - t_left;
+    const std::size_t n_right = std::size_t{1} << t_right;
+
+    _col_map.clear();
+
+    std::int64_t total_weight64 = 0;
+    const std::uint64_t tail_mask = tail_mask_for_cols(cols);
+
+    for (std::size_t word_index = 0; word_index < words_per_row; ++word_index) {
+        std::uint64_t active = 0;
+        for (const std::uint64_t* row_words : rows)
+            active |= row_words[word_index];
+
+        if (word_index + 1 == words_per_row)
+            active &= tail_mask;
+
+        while (active != 0) {
+            const unsigned bit = detail::ctz64(active);
+            const std::uint64_t bit_mask = std::uint64_t{1} << bit;
+
+            std::uint32_t s_left = 0;
+            std::uint32_t s_right = 0;
+
+            for (std::size_t r = 0; r < t_left; ++r) {
+                if ((rows[r][word_index] & bit_mask) != 0)
+                    s_left |= (std::uint32_t{1} << r);
+            }
+
+            for (std::size_t r = 0; r < t_right; ++r) {
+                if ((rows[t_left + r][word_index] & bit_mask) != 0)
+                    s_right |= (std::uint32_t{1} << r);
+            }
+
+            const std::uint64_t key =
+                (static_cast<std::uint64_t>(s_left) << 32) | static_cast<std::uint64_t>(s_right);
+
+            auto [it, inserted] = _col_map.emplace(key, 0);
+            (void)inserted;
+
+            if (it->second == std::numeric_limits<std::int32_t>::max())
+                throw std::overflow_error("MitmFwhtSearch: column multiplicity overflow");
+
+            ++it->second;
+            ++total_weight64;
+
+            if (total_weight64 >
+                static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max())) {
+                throw std::overflow_error("MitmFwhtSearch: total weight exceeds int32 range");
+            }
+
+            active &= (active - 1);
+        }
+    }
+
+    const std::size_t unique_count = _col_map.size();
+    if (unique_count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+        throw std::overflow_error("MitmFwhtSearch: unique column count exceeds int32 range");
+    }
+
+    ensure_capacity(unique_count, t_left, n_right);
+
+    std::fill(_adj_counts.begin(), _adj_counts.begin() + t_left, 0);
+
+    std::size_t idx = 0;
+    for (const auto& entry : _col_map) {
+        const std::uint32_t s_left = static_cast<std::uint32_t>(entry.first >> 32);
+        const std::uint32_t s_right = static_cast<std::uint32_t>(entry.first);
+        const std::int32_t weight = entry.second;
+
+        _col_data[idx] = pack_col(weight, s_right);
+        _left_masks[idx] = s_left;
+
+        std::uint32_t temp = s_left;
+        while (temp != 0) {
+            const std::size_t b = static_cast<std::size_t>(detail::ctz64(temp));
+            ++_adj_counts[b];
+            temp &= (temp - 1);
+        }
+
+        ++idx;
+    }
+
+    std::size_t offset = 0;
+    for (std::size_t b = 0; b < t_left; ++b) {
+        _adj_offsets[b] = offset;
+        offset += static_cast<std::size_t>(_adj_counts[b]);
+        _adj_counts[b] = 0;
+    }
+    _adj_offsets[t_left] = offset;
+
+    for (std::size_t i = 0; i < unique_count; ++i) {
+        std::uint32_t s_left = _left_masks[i];
+        while (s_left != 0) {
+            const std::size_t b = static_cast<std::size_t>(detail::ctz64(s_left));
+            const std::size_t pos = _adj_offsets[b] + static_cast<std::size_t>(_adj_counts[b]);
+            _adj_indices[pos] = static_cast<std::int32_t>(i);
+            ++_adj_counts[b];
+            s_left &= (s_left - 1);
+        }
+    }
+
+    for (std::size_t b = 0; b < t_left; ++b) {
+        const std::size_t start = _adj_offsets[b];
+        const std::size_t len = static_cast<std::size_t>(_adj_counts[b]);
+        if (len > 1) {
+            std::sort(_adj_indices.begin() + static_cast<std::ptrdiff_t>(start),
+                      _adj_indices.begin() + static_cast<std::ptrdiff_t>(start + len));
+        }
+    }
+
+    return {unique_count, static_cast<std::int32_t>(total_weight64)};
+}
+
+void MitmFwhtSearch::initialize_buckets(std::size_t unique_count, std::size_t n_right) {
+    std::fill(_buckets.begin(), _buckets.begin() + n_right, 0);
+
+    for (std::size_t i = 0; i < unique_count; ++i) {
+        const std::int64_t data = _col_data[i];
+        const std::int32_t weight = unpack_weight(data);
+        const std::uint32_t right_mask = unpack_right_mask(data);
+
+        const std::int64_t new_bucket = static_cast<std::int64_t>(_buckets[right_mask]) + weight;
+
+        if (new_bucket < std::numeric_limits<std::int32_t>::min() ||
+            new_bucket > std::numeric_limits<std::int32_t>::max()) {
+            throw std::overflow_error("MitmFwhtSearch: bucket overflow in initialize_buckets");
+        }
+
+        _buckets[right_mask] = static_cast<std::int32_t>(new_bucket);
+    }
+}
+
 } // namespace bmmpy
