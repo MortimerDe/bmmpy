@@ -337,4 +337,74 @@ void MitmFwhtSearch::process_candidate(std::uint32_t x_left,
     }
 }
 
+std::vector<Candidate> MitmFwhtSearch::search(const BitMatrix& matrix,
+                                              const std::vector<std::size_t>& window_rows) {
+    _candidates.clear();
+
+    if (_config.k_limit == 0)
+        return {};
+
+    const std::size_t t = window_rows.size();
+    if (t == 0)
+        return {};
+
+    if (t > Candidate::k_word_bits) {
+        throw std::invalid_argument("MitmFwhtSearch: window_rows size must be <= 64");
+    }
+
+    const auto [t_left, t_right] = get_split_info(t);
+
+    if (t_left > kMaxTLeft) {
+        throw std::invalid_argument("MitmFwhtSearch: left half exceeds supported width");
+    }
+
+    if (t_left >= kMaxTHalf || t_right >= kMaxTHalf) {
+        throw std::invalid_argument("MitmFwhtSearch: split dimensions must be < 31");
+    }
+
+    const std::size_t words_per_row = matrix.words_per_row();
+    if (words_per_row == 0)
+        return {};
+
+    std::vector<const std::uint64_t*> rows;
+    rows.reserve(t);
+    for (std::size_t row : window_rows) {
+        if (row >= matrix.rows())
+            throw std::out_of_range("window row out of bounds");
+        rows.push_back(matrix.row_words(row));
+    }
+
+    const auto [unique_cols, total_weight] =
+        prepare_columns(rows, words_per_row, matrix.cols(), t_left);
+
+    if (unique_cols == 0)
+        return {};
+
+    const std::size_t n_right = std::size_t{1} << t_right;
+    initialize_buckets(unique_cols, n_right);
+
+    std::int32_t min_score_threshold = std::numeric_limits<std::int32_t>::min();
+    std::uint32_t worst_weight = std::numeric_limits<std::uint32_t>::max();
+
+    process_candidate(0, n_right, t_left, total_weight, min_score_threshold, worst_weight);
+
+    std::uint32_t current_x_left = 0;
+    const std::size_t n_loop = std::size_t{1} << t_left;
+
+    for (std::size_t i = 1; i < n_loop; ++i) {
+        const std::size_t bit = static_cast<std::size_t>(detail::ctz64(i));
+        apply_bit_flip(bit);
+        current_x_left ^= (std::uint32_t{1} << bit);
+
+        process_candidate(
+            current_x_left, n_right, t_left, total_weight, min_score_threshold, worst_weight);
+    }
+
+    if (_candidates.size() < _config.k_limit) {
+        std::sort(_candidates.begin(), _candidates.end(), candidate_less);
+    }
+
+    return _candidates;
+}
+
 } // namespace bmmpy
