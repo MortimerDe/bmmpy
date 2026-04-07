@@ -2,10 +2,12 @@
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
 #include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/searcher.hpp"
 
 #include <cstdint>
 #include <initializer_list>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -179,6 +181,24 @@ void test_fwht_search_window_bounds() {
     expect_out_of_range([&] { (void)search.search(matrix, {1}); }, "fwht_search window bounds");
 }
 
+void test_searcher_interface_dispatch() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    std::unique_ptr<bmmpy::Searcher> searcher =
+        std::make_unique<bmmpy::FwhtSearch>(bmmpy::FwhtSearchConfig{16, 1});
+
+    require(std::string_view(searcher->name()) == "fwht", "searcher name");
+
+    const auto candidates = searcher->search(matrix, {0, 1});
+    require(candidates.size() == 1, "searcher candidate count");
+    require(candidates[0].mask_u64() == 0x3ull, "searcher best mask");
+    require(candidates[0].weight == 0, "searcher best weight");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -197,6 +217,7 @@ int main() {
         {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
         {"fwht_search_respects_k", &test_fwht_search_respects_k},
         {"fwht_search_window_bounds", &test_fwht_search_window_bounds},
+        {"searcher_interface_dispatch", &test_searcher_interface_dispatch},
     };
 
     for (const TestCase& test : tests) {
