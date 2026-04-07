@@ -4,6 +4,7 @@
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/searcher.hpp"
 
+#include <bmmpy/search/mitm_fwht_search.hpp>
 #include <cstdint>
 #include <initializer_list>
 #include <iostream>
@@ -16,6 +17,11 @@
 namespace {
 
 [[noreturn]] void fail(const std::string& message) { throw std::runtime_error(message); }
+
+void require(bool condition, std::string_view message) {
+    if (!condition)
+        fail(std::string(message));
+}
 
 bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) {
     const std::size_t row_count = rows.size();
@@ -51,11 +57,6 @@ void require_same_candidates(const std::vector<bmmpy::Candidate>& actual,
                 std::string(context) + ": mask mismatch");
         require(actual[i].weight == expected[i].weight, std::string(context) + ": weight mismatch");
     }
-}
-
-void require(bool condition, std::string_view message) {
-    if (!condition)
-        fail(std::string(message));
 }
 
 template <typename T>
@@ -235,6 +236,46 @@ void test_searcher_interface_dispatch() {
     require(candidates[0].weight == 0, "searcher best weight");
 }
 
+void test_mitm_fwht_matches_fwht_search() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "110010101001",
+        "101100101100",
+        "011010011001",
+        "111000010111",
+        "000111100011",
+        "101011110000",
+    });
+
+    const std::vector<std::size_t> window_rows = {0, 1, 2, 3, 4, 5};
+
+    bmmpy::FwhtSearch fwht({16, 8});
+    bmmpy::MitmFwhtSearch mitm(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 8});
+
+    const auto expected = fwht.search(matrix, window_rows);
+    const auto actual = mitm.search(matrix, window_rows);
+
+    require_same_candidates(actual, expected, "mitm_fwht matches fwht");
+}
+
+void test_mitm_fwht_searcher_interface_dispatch() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "10101",
+        "11100",
+        "00111",
+    });
+
+    bmmpy::FwhtSearch baseline({16, 4});
+    const auto expected = baseline.search(matrix, {0, 1, 2});
+
+    std::unique_ptr<bmmpy::Searcher> searcher = std::make_unique<bmmpy::MitmFwhtSearch>(
+        bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 4});
+
+    require(std::string_view(searcher->name()) == "mitm_fwht", "mitm searcher name");
+
+    const auto actual = searcher->search(matrix, {0, 1, 2});
+    require_same_candidates(actual, expected, "mitm searcher dispatch");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -254,7 +295,8 @@ int main() {
         {"fwht_search_respects_k", &test_fwht_search_respects_k},
         {"fwht_search_window_bounds", &test_fwht_search_window_bounds},
         {"searcher_interface_dispatch", &test_searcher_interface_dispatch},
-    };
+        {"mitm_fwht_matches_fwht_search", &test_mitm_fwht_matches_fwht_search},
+        {"mitm_fwht_searcher_interface_dispatch", &test_mitm_fwht_searcher_interface_dispatch}};
 
     for (const TestCase& test : tests) {
         try {

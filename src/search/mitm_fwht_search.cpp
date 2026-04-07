@@ -267,12 +267,14 @@ void MitmFwhtSearch::add_result(std::uint64_t mask,
                                 std::uint32_t& worst_weight) {
     const std::size_t k = _config.k_limit;
 
+    const Candidate incoming = Candidate::from_u64(mask, weight);
+
     auto sort_candidates = [this]() {
         std::sort(_candidates.begin(), _candidates.end(), candidate_less);
     };
 
     if (_candidates.size() < k) {
-        _candidates.push_back(Candidate::from_u64(mask, weight));
+        _candidates.push_back(incoming);
 
         if (_candidates.size() == k) {
             sort_candidates();
@@ -289,8 +291,8 @@ void MitmFwhtSearch::add_result(std::uint64_t mask,
         return;
     }
 
-    if (weight < worst_weight) {
-        _candidates.back() = Candidate::from_u64(mask, weight);
+    if (candidate_less(incoming, _candidates.back())) {
+        _candidates.back() = incoming;
         sort_candidates();
         worst_weight = _candidates.back().weight;
 
@@ -314,7 +316,7 @@ void MitmFwhtSearch::process_candidate(std::uint32_t x_left,
 
     for (std::size_t x_right = 0; x_right < n_right; ++x_right) {
         const std::int32_t score = _fwht_buffer[x_right];
-        if (score <= min_score_threshold)
+        if (score < min_score_threshold)
             continue;
 
         const std::int64_t w2 =

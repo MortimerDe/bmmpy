@@ -117,16 +117,16 @@ std::vector<Candidate> FwhtSearch::search(const BitMatrix& matrix,
             continue;
 
         const std::uint32_t weight = static_cast<std::uint32_t>(w2 / 2);
-
+        const Candidate incoming = Candidate::from_u64(static_cast<std::uint64_t>(mask), weight);
         if (candidates.size() < k) {
-            candidates.push_back(Candidate::from_u64(static_cast<std::uint64_t>(mask), weight));
+            candidates.push_back(incoming);
 
             if (candidates.size() == k) {
                 sort_candidates();
                 worst_weight = candidates.back().weight;
             }
-        } else if (weight < worst_weight) {
-            candidates.back() = Candidate::from_u64(static_cast<std::uint64_t>(mask), weight);
+        } else if (candidate_less(incoming, candidates.back())) {
+            candidates.back() = incoming;
             sort_candidates();
             worst_weight = candidates.back().weight;
         }
