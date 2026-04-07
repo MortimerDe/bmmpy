@@ -252,23 +252,47 @@ BitMatrix BitMatrix::load_text(std::istream& in) {
     if (!(in >> rows >> cols))
         throw_io_error("failed to read matrix text header");
 
-    std::string row_text;
     BitMatrix matrix(rows, cols);
+    const std::size_t total_bits = rows * cols;
+    std::size_t bit_index = 0;
+    char ch = '\0';
 
-    for (std::size_t row = 0; row < rows; ++row) {
-        if (!(in >> row_text))
-            throw_io_error("failed to read matrix text row");
+    while (bit_index < total_bits && in.get(ch)) {
+        switch (ch) {
+        case '0':
+        case '1': {
+            const std::size_t row = bit_index / cols;
+            const std::size_t col = bit_index % cols;
+            matrix.set_unchecked(row, col, ch == '1');
+            ++bit_index;
+            break;
+        }
+        case ' ':
+        case '\n':
+        case '\r':
+        case '\t':
+        case '\f':
+        case '\v':
+            break;
+        default:
+            throw_io_error("matrix text contains invalid character");
+        }
+    }
 
-        if (row_text.size() != cols)
-            throw_io_error("matrix text row has invalid width");
+    if (bit_index != total_bits)
+        throw_io_error("failed to read matrix text payload");
 
-        for (std::size_t col = 0; col < cols; ++col) {
-            const char ch = row_text[col];
-            if (ch == '1') {
-                matrix.set_unchecked(row, col, true);
-            } else if (ch != '0') {
-                throw_io_error("matrix text contains invalid character");
-            }
+    while (in.get(ch)) {
+        switch (ch) {
+        case ' ':
+        case '\n':
+        case '\r':
+        case '\t':
+        case '\f':
+        case '\v':
+            break;
+        default:
+            throw_io_error("matrix text contains trailing data");
         }
     }
 
