@@ -236,4 +236,105 @@ void MitmFwhtSearch::initialize_buckets(std::size_t unique_count, std::size_t n_
     }
 }
 
+void MitmFwhtSearch::apply_bit_flip(std::size_t bit) {
+    const std::size_t start = _adj_offsets[bit];
+    const std::size_t end = _adj_offsets[bit + 1];
+
+    for (std::size_t j = start; j < end; ++j) {
+        const std::size_t col_idx = static_cast<std::size_t>(_adj_indices[j]);
+
+        const std::int64_t data = _col_data[col_idx];
+        const std::uint32_t right_mask = unpack_right_mask(data);
+        const std::int32_t old_weight = unpack_weight(data);
+
+        const std::int64_t new_bucket = static_cast<std::int64_t>(_buckets[right_mask]) -
+                                        2LL * static_cast<std::int64_t>(old_weight);
+
+        if (new_bucket < std::numeric_limits<std::int32_t>::min() ||
+            new_bucket > std::numeric_limits<std::int32_t>::max()) {
+            throw std::overflow_error("MitmFwhtSearch: bucket overflow in apply_bit_flip");
+        }
+
+        _buckets[right_mask] = static_cast<std::int32_t>(new_bucket);
+        _col_data[col_idx] = pack_col(-old_weight, right_mask);
+    }
+}
+
+void MitmFwhtSearch::add_result(std::uint64_t mask,
+                                std::uint32_t weight,
+                                std::int32_t total_weight,
+                                std::int32_t& min_score_threshold,
+                                std::uint32_t& worst_weight) {
+    const std::size_t k = _config.k_limit;
+
+    auto sort_candidates = [this]() {
+        std::sort(_candidates.begin(), _candidates.end(), candidate_less);
+    };
+
+    if (_candidates.size() < k) {
+        _candidates.push_back(Candidate::from_u64(mask, weight));
+
+        if (_candidates.size() == k) {
+            sort_candidates();
+            worst_weight = _candidates.back().weight;
+
+            const std::int64_t threshold64 = static_cast<std::int64_t>(total_weight) -
+                                             2LL * static_cast<std::int64_t>(worst_weight);
+
+            min_score_threshold = threshold64 < std::numeric_limits<std::int32_t>::min()
+                                      ? std::numeric_limits<std::int32_t>::min()
+                                      : static_cast<std::int32_t>(threshold64);
+        }
+
+        return;
+    }
+
+    if (weight < worst_weight) {
+        _candidates.back() = Candidate::from_u64(mask, weight);
+        sort_candidates();
+        worst_weight = _candidates.back().weight;
+
+        const std::int64_t threshold64 =
+            static_cast<std::int64_t>(total_weight) - 2LL * static_cast<std::int64_t>(worst_weight);
+
+        min_score_threshold = threshold64 < std::numeric_limits<std::int32_t>::min()
+                                  ? std::numeric_limits<std::int32_t>::min()
+                                  : static_cast<std::int32_t>(threshold64);
+    }
+}
+
+void MitmFwhtSearch::process_candidate(std::uint32_t x_left,
+                                       std::size_t n_right,
+                                       std::size_t t_left,
+                                       std::int32_t total_weight,
+                                       std::int32_t& min_score_threshold,
+                                       std::uint32_t& worst_weight) {
+    std::copy_n(_buckets.begin(), n_right, _fwht_buffer.begin());
+    fwht_inplace(_fwht_buffer.data(), n_right);
+
+    for (std::size_t x_right = 0; x_right < n_right; ++x_right) {
+        const std::int32_t score = _fwht_buffer[x_right];
+        if (score <= min_score_threshold)
+            continue;
+
+        const std::int64_t w2 =
+            static_cast<std::int64_t>(total_weight) - static_cast<std::int64_t>(score);
+
+        if (w2 < 0 || (w2 & 1) != 0)
+            continue;
+
+        const std::uint64_t mask =
+            (static_cast<std::uint64_t>(x_right) << t_left) | static_cast<std::uint64_t>(x_left);
+
+        if (mask == 0)
+            continue;
+
+        add_result(mask,
+                   static_cast<std::uint32_t>(w2 / 2),
+                   total_weight,
+                   min_score_threshold,
+                   worst_weight);
+    }
+}
+
 } // namespace bmmpy
