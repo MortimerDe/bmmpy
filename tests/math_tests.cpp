@@ -1,5 +1,7 @@
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
+#include "bmmpy/search/fwht_search.hpp"
 
 #include <cstdint>
 #include <initializer_list>
@@ -11,9 +13,7 @@
 
 namespace {
 
-[[noreturn]] void fail(const std::string& message) {
-    throw std::runtime_error(message);
-}
+[[noreturn]] void fail(const std::string& message) { throw std::runtime_error(message); }
 
 void require(bool condition, std::string_view message) {
     if (!condition)
@@ -24,14 +24,25 @@ template <typename T>
 void require_eq(const std::vector<T>& actual,
                 std::initializer_list<T> expected,
                 std::string_view context) {
-    require(actual.size() == expected.size(),
-            std::string(context) + ": size mismatch");
+    require(actual.size() == expected.size(), std::string(context) + ": size mismatch");
 
     auto it = expected.begin();
     for (std::size_t i = 0; i < actual.size(); ++i, ++it) {
         if (actual[i] != *it)
             fail(std::string(context) + ": value mismatch");
     }
+}
+
+template <typename Fn> void expect_out_of_range(Fn&& fn, std::string_view context) {
+    try {
+        fn();
+    } catch (const std::out_of_range&) {
+        return;
+    } catch (const std::exception& ex) {
+        fail(std::string(context) + ": expected std::out_of_range, got: " + ex.what());
+    }
+
+    fail(std::string(context) + ": expected std::out_of_range");
 }
 
 void test_fixed_weight_masks_u32() {
@@ -102,13 +113,8 @@ void test_calc_scores_and_order_i32() {
     std::vector<std::int32_t> cnt(static_cast<std::size_t>(n) + 1, -1);
     std::vector<std::int32_t> off(static_cast<std::size_t>(n) + 1, -1);
 
-    bmmpy::calc_scores_and_order(h.data(),
-                                 h.size(),
-                                 n,
-                                 s_by_mask.data(),
-                                 order.data(),
-                                 cnt.data(),
-                                 off.data());
+    bmmpy::calc_scores_and_order(
+        h.data(), h.size(), n, s_by_mask.data(), order.data(), cnt.data(), off.data());
 
     require_eq<std::int32_t>(s_by_mask, {0, 2, 2, 0, 0}, "scores_i32");
     require_eq<std::int32_t>(order, {3, 4, 1, 2}, "order_i32");
@@ -124,17 +130,53 @@ void test_calc_scores_and_order_i16() {
     std::vector<std::int32_t> cnt(static_cast<std::size_t>(n) + 1, -1);
     std::vector<std::int32_t> off(static_cast<std::size_t>(n) + 1, -1);
 
-    bmmpy::calc_scores_and_order(h.data(),
-                                 h.size(),
-                                 n,
-                                 s_by_mask.data(),
-                                 order.data(),
-                                 cnt.data(),
-                                 off.data());
+    bmmpy::calc_scores_and_order(
+        h.data(), h.size(), n, s_by_mask.data(), order.data(), cnt.data(), off.data());
 
     require_eq<std::int16_t>(s_by_mask, {0, 0, 1, 2, 3}, "scores_i16");
     require_eq<std::int32_t>(order, {1, 2, 3, 4}, "order_i16");
     require_eq<std::int32_t>(cnt, {1, 1, 1, 1, 0}, "cnt_i16");
+}
+
+void test_fwht_search_finds_best_candidate() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    bmmpy::FwhtSearch search;
+    const auto candidates = search.search(matrix, {0, 1});
+
+    require(candidates.size() == 3, "fwht_search candidate count");
+    require(candidates[0].mask_u64() == 0x3ull, "fwht_search best mask");
+    require(candidates[0].weight == 0, "fwht_search best weight");
+
+    for (std::size_t i = 1; i < candidates.size(); ++i) {
+        require(candidates[i - 1].weight <= candidates[i].weight, "fwht_search result order");
+    }
+}
+
+void test_fwht_search_respects_k() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    bmmpy::FwhtSearch search({16, 1});
+    const auto candidates = search.search(matrix, {0, 1});
+
+    require(candidates.size() == 1, "fwht_search k limit");
+    require(candidates[0].mask_u64() == 0x3ull, "fwht_search k best mask");
+    require(candidates[0].weight == 0, "fwht_search k best weight");
+}
+
+void test_fwht_search_window_bounds() {
+    bmmpy::BitMatrix matrix(1, 1);
+    bmmpy::FwhtSearch search;
+
+    expect_out_of_range([&] { (void)search.search(matrix, {1}); }, "fwht_search window bounds");
 }
 
 struct TestCase {
@@ -152,6 +194,9 @@ int main() {
         {"fwht_i16_wrap", &test_fwht_i16_wrap},
         {"calc_scores_and_order_i32", &test_calc_scores_and_order_i32},
         {"calc_scores_and_order_i16", &test_calc_scores_and_order_i16},
+        {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
+        {"fwht_search_respects_k", &test_fwht_search_respects_k},
+        {"fwht_search_window_bounds", &test_fwht_search_window_bounds},
     };
 
     for (const TestCase& test : tests) {

@@ -20,6 +20,7 @@ target_sources(
         src/math/fwht_dispatch.cpp
 
         src/apply/greedy_selection.cpp
+        src/search/fwht_search.cpp
 )
 
 target_include_directories(bmmpy_core PUBLIC include)
