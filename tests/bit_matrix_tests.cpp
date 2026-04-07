@@ -2,7 +2,11 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -14,9 +18,7 @@ using bmmpy::MatrixError;
 
 namespace {
 
-[[noreturn]] void fail(const std::string& message) {
-    throw std::runtime_error(message);
-}
+[[noreturn]] void fail(const std::string& message) { throw std::runtime_error(message); }
 
 void require(bool condition, std::string_view message) {
     if (!condition)
@@ -48,8 +50,7 @@ BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) {
     return matrix;
 }
 
-void expect_rows(const BitMatrix& matrix,
-                 std::initializer_list<std::string_view> expected_rows) {
+void expect_rows(const BitMatrix& matrix, std::initializer_list<std::string_view> expected_rows) {
     const std::size_t expected_row_count = expected_rows.size();
     const std::size_t expected_col_count =
         expected_row_count == 0 ? 0 : expected_rows.begin()->size();
@@ -59,11 +60,9 @@ void expect_rows(const BitMatrix& matrix,
 
     std::size_t row_index = 0;
     for (std::string_view row : expected_rows) {
-        require(row.size() == expected_col_count,
-                "row width mismatch in expected matrix");
+        require(row.size() == expected_col_count, "row width mismatch in expected matrix");
 
-        for (std::size_t col_index = 0; col_index < expected_col_count;
-             ++col_index) {
+        for (std::size_t col_index = 0; col_index < expected_col_count; ++col_index) {
             const bool expected = row[col_index] == '1';
             const bool actual = matrix.get(row_index, col_index);
             if (actual != expected) {
@@ -75,36 +74,36 @@ void expect_rows(const BitMatrix& matrix,
     }
 }
 
-template <typename Fn>
-void expect_out_of_range(Fn&& fn, std::string_view context) {
+template <typename Fn> void expect_out_of_range(Fn&& fn, std::string_view context) {
     try {
         fn();
     } catch (const std::out_of_range&) {
         return;
     } catch (const std::exception& ex) {
-        fail(std::string(context) +
-             ": expected std::out_of_range, got: " + ex.what());
+        fail(std::string(context) + ": expected std::out_of_range, got: " + ex.what());
     }
 
     fail(std::string(context) + ": expected std::out_of_range");
 }
 
 template <typename Fn>
-void expect_matrix_error(Fn&& fn,
-                         MatrixErr expected_code,
-                         std::string_view context) {
+void expect_matrix_error(Fn&& fn, MatrixErr expected_code, std::string_view context) {
     try {
         fn();
     } catch (const MatrixError& ex) {
-        require(ex.code() == expected_code,
-                std::string(context) + ": MatrixError code mismatch");
+        require(ex.code() == expected_code, std::string(context) + ": MatrixError code mismatch");
         return;
     } catch (const std::exception& ex) {
-        fail(std::string(context) +
-             ": expected MatrixError, got: " + ex.what());
+        fail(std::string(context) + ": expected MatrixError, got: " + ex.what());
     }
 
     fail(std::string(context) + ": expected MatrixError");
+}
+
+std::filesystem::path unique_test_path(std::string_view suffix) {
+    static std::uint64_t counter = 0;
+    return std::filesystem::temp_directory_path() /
+           ("bmmpy_bit_matrix_" + std::to_string(counter++) + "_" + std::string(suffix));
 }
 
 void test_shape_and_storage() {
@@ -115,11 +114,8 @@ void test_shape_and_storage() {
     require(matrix.words_per_row() == 3, "words_per_row mismatch");
     require(matrix.stride_words() == 4, "stride should be padded to 4 words");
     require(matrix.total_words() == 12, "total_words mismatch");
-    require(matrix.total_bytes() == 12 * sizeof(std::uint64_t),
-            "total_bytes mismatch");
-    require(reinterpret_cast<std::uintptr_t>(matrix.data()) %
-                    BitMatrix::k_alignment ==
-                0,
+    require(matrix.total_bytes() == 12 * sizeof(std::uint64_t), "total_bytes mismatch");
+    require(reinterpret_cast<std::uintptr_t>(matrix.data()) % BitMatrix::k_alignment == 0,
             "data pointer is not aligned");
     require(matrix.weight() == 0, "new matrix must be zero-initialized");
 
@@ -152,16 +148,14 @@ void test_copy_and_move_semantics() {
 
     BitMatrix moved(std::move(assigned));
     expect_rows(moved, {"1010", "0101"});
-    require(assigned.data() == nullptr,
-            "moved-from matrix should release data");
+    require(assigned.data() == nullptr, "moved-from matrix should release data");
     require(assigned.rows() == 0, "moved-from matrix should reset rows");
     require(assigned.cols() == 0, "moved-from matrix should reset cols");
 
     BitMatrix move_assigned;
     move_assigned = std::move(moved);
     expect_rows(move_assigned, {"1010", "0101"});
-    require(moved.data() == nullptr,
-            "move-assigned source should release data");
+    require(moved.data() == nullptr, "move-assigned source should release data");
     require(moved.rows() == 0, "move-assigned source should reset rows");
     require(moved.cols() == 0, "move-assigned source should reset cols");
 }
@@ -234,16 +228,14 @@ void test_copy_from_words_and_exceptions() {
 
     expect_out_of_range([&] { matrix.set(2, 0, true); }, "set out of bounds");
     expect_out_of_range([&] { (void)matrix.get(0, 2); }, "get out of bounds");
-    expect_out_of_range([&] { (void)matrix.row_words(2); },
-                        "row_words out of bounds");
+    expect_out_of_range([&] { (void)matrix.row_words(2); }, "row_words out of bounds");
     expect_out_of_range([&] { matrix.extract_rows_by_indices({2}); },
                         "extract_rows_by_indices out of bounds");
 
     std::array<std::uint64_t, 1> wrong_words{};
-    expect_matrix_error(
-        [&] { matrix.copy_from_words(wrong_words.data(), wrong_words.size()); },
-        MatrixErr::DimensionMismatch,
-        "copy_from_words");
+    expect_matrix_error([&] { matrix.copy_from_words(wrong_words.data(), wrong_words.size()); },
+                        MatrixErr::DimensionMismatch,
+                        "copy_from_words");
 
     BitMatrix add_mismatch(3, 2);
     expect_matrix_error([&] { (void)matrix.add(add_mismatch); },
@@ -274,6 +266,97 @@ void test_copy_from_words_and_exceptions() {
                         "insert_rows_by_indices target out of bounds");
 }
 
+void test_text_io_roundtrip() {
+    BitMatrix original = matrix_from_rows({
+        "10101",
+        "01010",
+        "11100",
+    });
+
+    std::stringstream buffer;
+    original.save_text(buffer);
+
+    BitMatrix loaded = BitMatrix::load_text(buffer);
+    expect_rows(loaded, {"10101", "01010", "11100"});
+}
+
+void test_binary_io_roundtrip_with_unpadded_payload() {
+    BitMatrix original(3, 130);
+    original.set(0, 0, true);
+    original.set(0, 64, true);
+    original.set(1, 63, true);
+    original.set(1, 129, true);
+    original.set(2, 5, true);
+
+    std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
+    original.save_binary(buffer);
+    buffer.seekg(0);
+
+    BitMatrix loaded = BitMatrix::load_binary(buffer);
+
+    require(loaded.rows() == 3, "binary io rows mismatch");
+    require(loaded.cols() == 130, "binary io cols mismatch");
+    require(loaded.words_per_row() == 3, "binary io words_per_row mismatch");
+    expect_rows(loaded,
+                {
+                    "100000000000000000000000000000000000000000000000000000000000000010000000000000"
+                    "0000000000000000000000000000000000000000000000000000",
+                    "000000000000000000000000000000000000000000000000000000000000000100000000000000"
+                    "0000000000000000000000000000000000000000000000000001",
+                    "000001000000000000000000000000000000000000000000000000000000000000000000000000"
+                    "0000000000000000000000000000000000000000000000000000",
+                });
+}
+
+void test_text_io_exceptions() {
+    {
+        std::stringstream buffer("2 3\n010\n01x\n");
+        try {
+            (void)BitMatrix::load_text(buffer);
+            fail("expected text io failure");
+        } catch (const std::runtime_error&) {
+        }
+    }
+
+    {
+        std::stringstream buffer("2 3\n010\n01\n");
+        try {
+            (void)BitMatrix::load_text(buffer);
+            fail("expected text io failure");
+        } catch (const std::runtime_error&) {
+        }
+    }
+}
+
+void test_binary_io_exceptions() {
+    {
+        std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
+        buffer.write("BADMAGC", 7);
+        buffer.seekg(0);
+
+        try {
+            (void)BitMatrix::load_binary(buffer);
+            fail("expected binary io failure");
+        } catch (const std::runtime_error&) {
+        }
+    }
+
+    {
+        std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
+        BitMatrix matrix = matrix_from_rows({"101", "010"});
+        matrix.save_binary(buffer);
+        std::string data = buffer.str();
+        data.resize(data.size() - 1);
+
+        std::stringstream truncated(data, std::ios::in | std::ios::out | std::ios::binary);
+        try {
+            (void)BitMatrix::load_binary(truncated);
+            fail("expected truncated binary io failure");
+        } catch (const std::runtime_error&) {
+        }
+    }
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -288,8 +371,13 @@ int main() {
         {"row_operations", &test_row_operations},
         {"add_mul_and_power", &test_add_mul_and_power},
         {"rank_and_row_selection", &test_rank_and_row_selection},
-        {"copy_from_words_and_exceptions",
-         &test_copy_from_words_and_exceptions},
+        {"copy_from_words_and_exceptions", &test_copy_from_words_and_exceptions},
+        {"text_io_roundtrip", &test_text_io_roundtrip},
+        {"binary_io_roundtrip_with_unpadded_payload",
+         &test_binary_io_roundtrip_with_unpadded_payload},
+        {"text_io_exceptions", &test_text_io_exceptions},
+        {"binary_io_exceptions", &test_binary_io_exceptions},
+
     };
 
     for (const TestCase& test : tests) {
