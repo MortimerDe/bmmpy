@@ -96,8 +96,6 @@ private:
         return _data + row * _stride;
     }
 
-    static unsigned ctz64(std::uint64_t value) noexcept; // Count Trailing Zeros
-
     // fields
     std::uint64_t* _data = nullptr;
     std::size_t _rows = 0;

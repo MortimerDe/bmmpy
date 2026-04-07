@@ -1,10 +1,18 @@
-#include <iostream>
+#include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/searcher.hpp"
 #include "bmmpy/stub.hpp"
+#include "bmmpy/types/candidate.hpp"
 
-int main()
-{
+#include <iostream>
+
+int main() {
     std::cout << "Version: " << bmmpy::get_version() << std::endl;
-    std::cout << "Add: " << bmmpy::add(2, 3) << std::endl;
+
+    bmmpy::Searcher* s = new bmmpy::FwhtSearch();
+
+    std::cout << (*s).describe(32) << std::endl;
+
+    delete s;
 
     return 0;
 }

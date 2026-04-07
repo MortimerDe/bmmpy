@@ -1,5 +1,6 @@
 #include "bmmpy/core/bit_matrix.hpp"
 
+#include "bmmpy/core/detail/bit_intrinsics.hpp"
 #include "bmmpy/core/detail/bit_ops.hpp"
 
 #include <algorithm>
@@ -156,10 +157,6 @@ bool BitMatrix::get_unchecked(std::size_t row, std::size_t col) const noexcept {
            0;
 }
 
-unsigned BitMatrix::ctz64(std::uint64_t value) noexcept {
-    return static_cast<unsigned>(__builtin_ctzll(value));
-}
-
 void BitMatrix::row_xor(std::size_t target_row,
                         std::size_t source_row) noexcept {
     assert(target_row < _rows);
@@ -245,7 +242,7 @@ BitMatrix BitMatrix::mul(const BitMatrix& other) const {
         for (std::size_t word_idx = 0; word_idx < used_words; ++word_idx) {
             std::uint64_t bits = lhs[word_idx];
             while (bits != 0) {
-                const unsigned bit = ctz64(bits);
+                const unsigned bit = detail::ctz64(bits);
                 const std::size_t k = word_idx * k_word_bits + bit;
                 if (k < _cols)
                     result.row_xor_from(i, other, k);

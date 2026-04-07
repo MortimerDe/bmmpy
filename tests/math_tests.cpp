@@ -1,9 +1,14 @@
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
+#include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/searcher.hpp"
 
+#include <bmmpy/search/mitm_fwht_search.hpp>
 #include <cstdint>
 #include <initializer_list>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -11,27 +16,72 @@
 
 namespace {
 
-[[noreturn]] void fail(const std::string& message) {
-    throw std::runtime_error(message);
-}
+[[noreturn]] void fail(const std::string& message) { throw std::runtime_error(message); }
 
 void require(bool condition, std::string_view message) {
     if (!condition)
         fail(std::string(message));
 }
 
+bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) {
+    const std::size_t row_count = rows.size();
+    const std::size_t col_count = row_count == 0 ? 0 : rows.begin()->size();
+
+    bmmpy::BitMatrix matrix(row_count, col_count);
+
+    std::size_t row_index = 0;
+    for (std::string_view row : rows) {
+        require(row.size() == col_count, "row width mismatch in test fixture");
+
+        for (std::size_t col_index = 0; col_index < col_count; ++col_index) {
+            const char ch = row[col_index];
+            if (ch == '1')
+                matrix.set(row_index, col_index, true);
+            else if (ch != '0')
+                fail("test fixture must contain only '0' or '1'");
+        }
+
+        ++row_index;
+    }
+
+    return matrix;
+}
+
+void require_same_candidates(const std::vector<bmmpy::Candidate>& actual,
+                             const std::vector<bmmpy::Candidate>& expected,
+                             std::string_view context) {
+    require(actual.size() == expected.size(), std::string(context) + ": size mismatch");
+
+    for (std::size_t i = 0; i < actual.size(); ++i) {
+        require(actual[i].mask_u64() == expected[i].mask_u64(),
+                std::string(context) + ": mask mismatch");
+        require(actual[i].weight == expected[i].weight, std::string(context) + ": weight mismatch");
+    }
+}
+
 template <typename T>
 void require_eq(const std::vector<T>& actual,
                 std::initializer_list<T> expected,
                 std::string_view context) {
-    require(actual.size() == expected.size(),
-            std::string(context) + ": size mismatch");
+    require(actual.size() == expected.size(), std::string(context) + ": size mismatch");
 
     auto it = expected.begin();
     for (std::size_t i = 0; i < actual.size(); ++i, ++it) {
         if (actual[i] != *it)
             fail(std::string(context) + ": value mismatch");
     }
+}
+
+template <typename Fn> void expect_out_of_range(Fn&& fn, std::string_view context) {
+    try {
+        fn();
+    } catch (const std::out_of_range&) {
+        return;
+    } catch (const std::exception& ex) {
+        fail(std::string(context) + ": expected std::out_of_range, got: " + ex.what());
+    }
+
+    fail(std::string(context) + ": expected std::out_of_range");
 }
 
 void test_fixed_weight_masks_u32() {
@@ -102,13 +152,8 @@ void test_calc_scores_and_order_i32() {
     std::vector<std::int32_t> cnt(static_cast<std::size_t>(n) + 1, -1);
     std::vector<std::int32_t> off(static_cast<std::size_t>(n) + 1, -1);
 
-    bmmpy::calc_scores_and_order(h.data(),
-                                 h.size(),
-                                 n,
-                                 s_by_mask.data(),
-                                 order.data(),
-                                 cnt.data(),
-                                 off.data());
+    bmmpy::calc_scores_and_order(
+        h.data(), h.size(), n, s_by_mask.data(), order.data(), cnt.data(), off.data());
 
     require_eq<std::int32_t>(s_by_mask, {0, 2, 2, 0, 0}, "scores_i32");
     require_eq<std::int32_t>(order, {3, 4, 1, 2}, "order_i32");
@@ -124,17 +169,111 @@ void test_calc_scores_and_order_i16() {
     std::vector<std::int32_t> cnt(static_cast<std::size_t>(n) + 1, -1);
     std::vector<std::int32_t> off(static_cast<std::size_t>(n) + 1, -1);
 
-    bmmpy::calc_scores_and_order(h.data(),
-                                 h.size(),
-                                 n,
-                                 s_by_mask.data(),
-                                 order.data(),
-                                 cnt.data(),
-                                 off.data());
+    bmmpy::calc_scores_and_order(
+        h.data(), h.size(), n, s_by_mask.data(), order.data(), cnt.data(), off.data());
 
     require_eq<std::int16_t>(s_by_mask, {0, 0, 1, 2, 3}, "scores_i16");
     require_eq<std::int32_t>(order, {1, 2, 3, 4}, "order_i16");
     require_eq<std::int32_t>(cnt, {1, 1, 1, 1, 0}, "cnt_i16");
+}
+
+void test_fwht_search_finds_best_candidate() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    bmmpy::FwhtSearch search;
+    const auto candidates = search.search(matrix, {0, 1});
+
+    require(candidates.size() == 3, "fwht_search candidate count");
+    require(candidates[0].mask_u64() == 0x3ull, "fwht_search best mask");
+    require(candidates[0].weight == 0, "fwht_search best weight");
+
+    for (std::size_t i = 1; i < candidates.size(); ++i) {
+        require(candidates[i - 1].weight <= candidates[i].weight, "fwht_search result order");
+    }
+}
+
+void test_fwht_search_respects_k() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    bmmpy::FwhtSearch search({16, 1});
+    const auto candidates = search.search(matrix, {0, 1});
+
+    require(candidates.size() == 1, "fwht_search k limit");
+    require(candidates[0].mask_u64() == 0x3ull, "fwht_search k best mask");
+    require(candidates[0].weight == 0, "fwht_search k best weight");
+}
+
+void test_fwht_search_window_bounds() {
+    bmmpy::BitMatrix matrix(1, 1);
+    bmmpy::FwhtSearch search;
+
+    expect_out_of_range([&] { (void)search.search(matrix, {1}); }, "fwht_search window bounds");
+}
+
+void test_searcher_interface_dispatch() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    std::unique_ptr<bmmpy::Searcher> searcher =
+        std::make_unique<bmmpy::FwhtSearch>(bmmpy::FwhtSearchConfig{16, 1});
+
+    require(std::string_view(searcher->name()) == "fwht", "searcher name");
+
+    const auto candidates = searcher->search(matrix, {0, 1});
+    require(candidates.size() == 1, "searcher candidate count");
+    require(candidates[0].mask_u64() == 0x3ull, "searcher best mask");
+    require(candidates[0].weight == 0, "searcher best weight");
+}
+
+void test_mitm_fwht_matches_fwht_search() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "110010101001",
+        "101100101100",
+        "011010011001",
+        "111000010111",
+        "000111100011",
+        "101011110000",
+    });
+
+    const std::vector<std::size_t> window_rows = {0, 1, 2, 3, 4, 5};
+
+    bmmpy::FwhtSearch fwht({16, 8});
+    bmmpy::MitmFwhtSearch mitm(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 8});
+
+    const auto expected = fwht.search(matrix, window_rows);
+    const auto actual = mitm.search(matrix, window_rows);
+
+    require_same_candidates(actual, expected, "mitm_fwht matches fwht");
+}
+
+void test_mitm_fwht_searcher_interface_dispatch() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "10101",
+        "11100",
+        "00111",
+    });
+
+    bmmpy::FwhtSearch baseline({16, 4});
+    const auto expected = baseline.search(matrix, {0, 1, 2});
+
+    std::unique_ptr<bmmpy::Searcher> searcher = std::make_unique<bmmpy::MitmFwhtSearch>(
+        bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 4});
+
+    require(std::string_view(searcher->name()) == "mitm_fwht", "mitm searcher name");
+
+    const auto actual = searcher->search(matrix, {0, 1, 2});
+    require_same_candidates(actual, expected, "mitm searcher dispatch");
 }
 
 struct TestCase {
@@ -152,7 +291,12 @@ int main() {
         {"fwht_i16_wrap", &test_fwht_i16_wrap},
         {"calc_scores_and_order_i32", &test_calc_scores_and_order_i32},
         {"calc_scores_and_order_i16", &test_calc_scores_and_order_i16},
-    };
+        {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
+        {"fwht_search_respects_k", &test_fwht_search_respects_k},
+        {"fwht_search_window_bounds", &test_fwht_search_window_bounds},
+        {"searcher_interface_dispatch", &test_searcher_interface_dispatch},
+        {"mitm_fwht_matches_fwht_search", &test_mitm_fwht_matches_fwht_search},
+        {"mitm_fwht_searcher_interface_dispatch", &test_mitm_fwht_searcher_interface_dispatch}};
 
     for (const TestCase& test : tests) {
         try {
