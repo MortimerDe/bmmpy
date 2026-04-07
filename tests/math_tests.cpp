@@ -17,6 +17,42 @@ namespace {
 
 [[noreturn]] void fail(const std::string& message) { throw std::runtime_error(message); }
 
+bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) {
+    const std::size_t row_count = rows.size();
+    const std::size_t col_count = row_count == 0 ? 0 : rows.begin()->size();
+
+    bmmpy::BitMatrix matrix(row_count, col_count);
+
+    std::size_t row_index = 0;
+    for (std::string_view row : rows) {
+        require(row.size() == col_count, "row width mismatch in test fixture");
+
+        for (std::size_t col_index = 0; col_index < col_count; ++col_index) {
+            const char ch = row[col_index];
+            if (ch == '1')
+                matrix.set(row_index, col_index, true);
+            else if (ch != '0')
+                fail("test fixture must contain only '0' or '1'");
+        }
+
+        ++row_index;
+    }
+
+    return matrix;
+}
+
+void require_same_candidates(const std::vector<bmmpy::Candidate>& actual,
+                             const std::vector<bmmpy::Candidate>& expected,
+                             std::string_view context) {
+    require(actual.size() == expected.size(), std::string(context) + ": size mismatch");
+
+    for (std::size_t i = 0; i < actual.size(); ++i) {
+        require(actual[i].mask_u64() == expected[i].mask_u64(),
+                std::string(context) + ": mask mismatch");
+        require(actual[i].weight == expected[i].weight, std::string(context) + ": weight mismatch");
+    }
+}
+
 void require(bool condition, std::string_view message) {
     if (!condition)
         fail(std::string(message));

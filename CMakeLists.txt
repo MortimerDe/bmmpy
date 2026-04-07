@@ -21,6 +21,7 @@ target_sources(
 
         src/apply/greedy_selection.cpp
         src/search/fwht_search.cpp
+        src/search/mitm_fwht_search.cpp
 )
 
 target_include_directories(bmmpy_core PUBLIC include)
