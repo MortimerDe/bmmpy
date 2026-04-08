@@ -1,10 +1,16 @@
-#include <iostream>
+#include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/searcher.hpp"
 #include "bmmpy/stub.hpp"
+#include "bmmpy/types/candidate.hpp"
 
-int main()
-{
+#include <iostream>
+
+int main() {
     std::cout << "Version: " << bmmpy::get_version() << std::endl;
-    std::cout << "Add: " << bmmpy::add(2, 3) << std::endl;
+
+    bmmpy::BitMatrix bm = bmmpy::BitMatrix::load_text("___matrix.txt");
+
+    std::cout << bm.weight() << std::endl;
 
     return 0;
 }
