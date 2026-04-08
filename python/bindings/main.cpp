@@ -250,7 +250,18 @@ NB_MODULE(_bmmpy, m) {
         .def_rw("parallel_enabled", &bmmpy::RuntimeFeatures::parallel_enabled)
         .def_rw("max_threads", &bmmpy::RuntimeFeatures::max_threads)
         .def_rw("bit_ops_backend", &bmmpy::RuntimeFeatures::bit_ops_backend)
-        .def_rw("fwht_backend", &bmmpy::RuntimeFeatures::fwht_backend);
+        .def_rw("fwht_backend", &bmmpy::RuntimeFeatures::fwht_backend)
+        .def("__repr__", [](const bmmpy::RuntimeFeatures& value) {
+            return "RuntimeFeatures("
+                   "avx2_compiled=" +
+                   std::string(value.avx2_compiled ? "True" : "False") +
+                   ", avx2_available=" + std::string(value.avx2_available ? "True" : "False") +
+                   ", parallel_compiled=" +
+                   std::string(value.parallel_compiled ? "True" : "False") +
+                   ", parallel_enabled=" + std::string(value.parallel_enabled ? "True" : "False") +
+                   ", max_threads=" + std::to_string(value.max_threads) + ", bit_ops_backend='" +
+                   value.bit_ops_backend + "', fwht_backend='" + value.fwht_backend + "')";
+        });
 
     m.def("get_version", &bmmpy::get_version, "Get the version of the library");
     m.def("add", &bmmpy::add, nb::arg("a"), nb::arg("b"), "Add two integers");
