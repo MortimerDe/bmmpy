@@ -1,16 +1,19 @@
+#include "bmmpy/apply/greedy_selection.hpp"
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
+#include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/mitm_fwht_search.hpp"
 #include "bmmpy/stub.hpp"
 #include "bmmpy/types/candidate.hpp"
 
-#include <bmmpy/apply/greedy_selection.hpp>
 #include <cstdint>
 #include <filesystem>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <new>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -59,6 +62,17 @@ std::vector<std::string> matrix_to_rows(const bmmpy::BitMatrix& matrix) {
     return rows;
 }
 
+std::vector<std::size_t> candidate_selected_rows(const bmmpy::Candidate& candidate) {
+    std::vector<std::size_t> result;
+    result.reserve(candidate.mask_popcount());
+
+    for (std::size_t row : candidate.selected_rows()) {
+        result.push_back(row);
+    }
+
+    return result;
+}
+
 std::string matrix_to_text(const bmmpy::BitMatrix& matrix) {
     std::ostringstream out;
     matrix.save_text(out);
@@ -76,17 +90,6 @@ std::string matrix_repr(const bmmpy::BitMatrix& matrix) {
            ", weight=" + std::to_string(matrix.weight()) + ")";
 }
 
-std::vector<std::size_t> candidate_selected_rows(const bmmpy::Candidate& candidate) {
-    std::vector<std::size_t> result;
-    result.reserve(candidate.mask_popcount());
-
-    for (std::size_t row : candidate.selected_rows()) {
-        result.push_back(row);
-    }
-
-    return result;
-}
-
 std::string candidate_repr(const bmmpy::Candidate& candidate) {
     return "Candidate(mask_words=" + std::to_string(candidate.mask.size()) +
            ", weight=" + std::to_string(candidate.weight) + ")";
@@ -94,10 +97,8 @@ std::string candidate_repr(const bmmpy::Candidate& candidate) {
 
 } // namespace
 
-NB_MODULE(_bmmpy, m) {
+NB_MODULE(bmmpy, m) {
     m.doc() = "Python bindings for bmmpy";
-
-    m.def("get_version", &bmmpy::get_version, "Get the version of the library");
 
     nb::exception<bmmpy::MatrixError>(m, "MatrixError", PyExc_RuntimeError);
 
@@ -205,6 +206,45 @@ NB_MODULE(_bmmpy, m) {
             nb::arg("mask"),
             nb::arg("weight"),
             nb::rv_policy::move);
+
+    nb::class_<bmmpy::FwhtSearchConfig>(m, "FwhtSearchConfig")
+        .def(nb::init<>())
+        .def_rw("max_rows", &bmmpy::FwhtSearchConfig::max_rows)
+        .def_rw("k", &bmmpy::FwhtSearchConfig::k);
+
+    nb::class_<bmmpy::MitmFwhtSearchConfig>(m, "MitmFwhtSearchConfig")
+        .def(nb::init<>())
+        .def_rw("initial_capacity_cols", &bmmpy::MitmFwhtSearchConfig::initial_capacity_cols)
+        .def_rw("max_t_left", &bmmpy::MitmFwhtSearchConfig::max_t_left)
+        .def_rw("max_n_right", &bmmpy::MitmFwhtSearchConfig::max_n_right)
+        .def_rw("k_limit", &bmmpy::MitmFwhtSearchConfig::k_limit);
+
+    nb::class_<bmmpy::FwhtSearch>(m, "FwhtSearch")
+        .def(nb::init<bmmpy::FwhtSearchConfig>(), nb::arg("config") = bmmpy::FwhtSearchConfig{})
+        .def("name", &bmmpy::FwhtSearch::name)
+        .def("describe", &bmmpy::FwhtSearch::describe, nb::arg("window_size"))
+        .def("search", &bmmpy::FwhtSearch::search, nb::arg("matrix"), nb::arg("window_rows"));
+
+    nb::class_<bmmpy::MitmFwhtSearch>(m, "MitmFwhtSearch")
+        .def(nb::init<bmmpy::MitmFwhtSearchConfig>(),
+             nb::arg("config") = bmmpy::MitmFwhtSearchConfig{})
+        .def("name", &bmmpy::MitmFwhtSearch::name)
+        .def("describe", &bmmpy::MitmFwhtSearch::describe, nb::arg("window_size"))
+        .def("search", &bmmpy::MitmFwhtSearch::search, nb::arg("matrix"), nb::arg("window_rows"));
+
+    nb::class_<bmmpy::GreedySelection>(m, "GreedySelection")
+        .def(nb::init<std::uint64_t, bool, std::uint64_t>(),
+             nb::arg("min_gain"),
+             nb::arg("stochastic") = false,
+             nb::arg("seed") = 0)
+        .def("apply",
+             &bmmpy::GreedySelection::apply,
+             nb::arg("matrix"),
+             nb::arg("window_rows"),
+             nb::arg("candidates"));
+
+    m.def("get_version", &bmmpy::get_version, "Get the version of the library");
+    m.def("add", &bmmpy::add, nb::arg("a"), nb::arg("b"), "Add two integers");
 
     m.def(
         "fixed_weight_masks_u32",
