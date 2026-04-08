@@ -4,10 +4,18 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "bmmpy"
-version = "0.1.1"
+version = "0.1.2"
+requires-python = ">=3.12"
 dependencies = ["numpy"]
 
 [tool.scikit-build]
 cmake.build-type = "Release"
 ninja.make-fallback = true
 wheel.packages = ["bmmpy"]
+wheel.py-api = "cp312"
+
+[tool.cibuildwheel]
+build-verbosity = 1
+archs = ["auto64"]
+build = "cp312-*"
+skip = "*musllinux* *i686*"
