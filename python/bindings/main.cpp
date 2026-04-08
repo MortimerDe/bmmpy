@@ -13,7 +13,6 @@
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
-#include <new>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -97,7 +96,7 @@ std::string candidate_repr(const bmmpy::Candidate& candidate) {
 
 } // namespace
 
-NB_MODULE(bmmpy, m) {
+NB_MODULE(_bmmpy, m) {
     m.doc() = "Python bindings for bmmpy";
 
     nb::exception<bmmpy::MatrixError>(m, "MatrixError", PyExc_RuntimeError);
