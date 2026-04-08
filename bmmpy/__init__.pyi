@@ -14,6 +14,16 @@ class MatrixErr(Enum):
 
 class MatrixError(RuntimeError): ...
 
+class RuntimeFeatures:
+    avx2_compiled: bool
+    avx2_available: bool
+    parallel_compiled: bool
+    parallel_enabled: bool
+    max_threads: int
+    bit_ops_backend: str
+    fwht_backend: str
+
+    def __init__(self) -> None: ...
 
 class BitMatrix:
     @overload
@@ -188,6 +198,8 @@ def apply_greedy(
     stochastic: bool = False,
     seed: int = 0,
 ) -> ApplyResult: ...
+
+def get_runtime_features() -> RuntimeFeatures: ...
 
 __version__: str
 

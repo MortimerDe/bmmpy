@@ -13,11 +13,13 @@ from ._bmmpy import (
     MatrixError,
     MitmFwhtSearch,
     MitmFwhtSearchConfig,
+    RuntimeFeatures,
     add,
     fixed_weight_masks_u32,
     fixed_weight_masks_u64,
     fwht_i16,
     fwht_i32,
+    get_runtime_features,
     get_version,
 )
 
@@ -115,6 +117,8 @@ __all__ = [
     "make_mitm_fwht_config",
     "matrix_from_rows",
     "mitm_fwht_search",
+    "RuntimeFeatures",
+    "get_runtime_features",
 ]
 
 __version__ = get_version()

@@ -97,8 +97,14 @@ endif()
 
 
 # Third-party dependencies
-find_package(OpenMP REQUIRED)
-target_link_libraries(bmmpy_core PUBLIC OpenMP::OpenMP_CXX)
+find_package(OpenMP)
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(bmmpy_core PUBLIC OpenMP::OpenMP_CXX)
+    target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_OPENMP=1)
+else()
+    message(STATUS "OpenMP not found; building without parallel FWHT backend")
+endif()
 
 find_package(
     Python 3.12 REQUIRED

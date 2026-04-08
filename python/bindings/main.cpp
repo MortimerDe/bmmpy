@@ -242,8 +242,21 @@ NB_MODULE(_bmmpy, m) {
              nb::arg("window_rows"),
              nb::arg("candidates"));
 
+    nb::class_<bmmpy::RuntimeFeatures>(m, "RuntimeFeatures")
+        .def(nb::init<>())
+        .def_rw("avx2_compiled", &bmmpy::RuntimeFeatures::avx2_compiled)
+        .def_rw("avx2_available", &bmmpy::RuntimeFeatures::avx2_available)
+        .def_rw("parallel_compiled", &bmmpy::RuntimeFeatures::parallel_compiled)
+        .def_rw("parallel_enabled", &bmmpy::RuntimeFeatures::parallel_enabled)
+        .def_rw("max_threads", &bmmpy::RuntimeFeatures::max_threads)
+        .def_rw("bit_ops_backend", &bmmpy::RuntimeFeatures::bit_ops_backend)
+        .def_rw("fwht_backend", &bmmpy::RuntimeFeatures::fwht_backend);
+
     m.def("get_version", &bmmpy::get_version, "Get the version of the library");
     m.def("add", &bmmpy::add, nb::arg("a"), nb::arg("b"), "Add two integers");
+    m.def("get_runtime_features",
+          &bmmpy::get_runtime_features,
+          "Return runtime feature flags for this build and host");
 
     m.def(
         "fixed_weight_masks_u32",

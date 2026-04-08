@@ -76,7 +76,11 @@ jobs:
           CIBW_BUILD: cp312-*
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_TEST_COMMAND: python -c "import bmmpy; print(bmmpy.__version__); print(bmmpy.add(2, 3))"
+          CIBW_TEST_COMMAND: >
+            python -c "import bmmpy; f=bmmpy.get_runtime_features();
+            print(bmmpy.__version__);
+            print(f.avx2_compiled, f.avx2_available, f.parallel_compiled, f.parallel_enabled, f.max_threads, f.bit_ops_backend, f.fwht_backend);
+            print(bmmpy.add(2, 3))"
         run: python -m cibuildwheel --platform ${{ matrix.platform }} --output-dir dist
 
       - name: Upload wheel artifacts
