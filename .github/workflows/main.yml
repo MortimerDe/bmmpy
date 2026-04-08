@@ -32,17 +32,7 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
 
-          pyproject_version="$(python - <<'PY'
-from pathlib import Path
-import re
-
-text = Path("pyproject.toml").read_text(encoding="utf-8")
-match = re.search(r'^version = "([^"]+)"$', text, re.MULTILINE)
-if not match:
-    raise SystemExit("Failed to read version from pyproject.toml")
-print(match.group(1))
-PY
-)"
+          pyproject_version="$(python -c 'import tomllib; from pathlib import Path; print(tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])')"
 
           if [[ "${version}" != "${pyproject_version}" ]]; then
             echo "::error::Tag version ${version} does not match pyproject.toml version ${pyproject_version}"
