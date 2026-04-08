@@ -4,6 +4,7 @@
 #include "bmmpy/types/candidate.hpp"
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 namespace bmmpy {
