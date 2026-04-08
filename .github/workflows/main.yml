@@ -1,0 +1,144 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate tag against pyproject.toml
+        id: meta
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+
+          pyproject_version="$(python - <<'PY'
+from pathlib import Path
+import re
+
+text = Path("pyproject.toml").read_text(encoding="utf-8")
+match = re.search(r'^version = "([^"]+)"$', text, re.MULTILINE)
+if not match:
+    raise SystemExit("Failed to read version from pyproject.toml")
+print(match.group(1))
+PY
+)"
+
+          if [[ "${version}" != "${pyproject_version}" ]]; then
+            echo "::error::Tag version ${version} does not match pyproject.toml version ${pyproject_version}"
+            exit 1
+          fi
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+  build_wheels:
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            artifact_name: wheels-linux
+            cibw_archs: auto64
+          - os: windows-2022
+            platform: windows
+            artifact_name: wheels-windows
+            cibw_archs: AMD64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip cibuildwheel
+
+      - name: Build wheels
+        env:
+          CIBW_BUILD: cp312-*
+          CIBW_ARCHS: ${{ matrix.cibw_archs }}
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_TEST_COMMAND: python -c "import bmmpy; print(bmmpy.__version__); print(bmmpy.add(2, 3))"
+        run: python -m cibuildwheel --platform ${{ matrix.platform }} --output-dir dist
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  build_sdist:
+    needs: validate
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sdist tooling
+        run: python -m pip install --upgrade pip build
+
+      - name: Build sdist
+        run: python -m build --sdist --outdir dist
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish_release:
+    needs:
+      - validate
+      - build_wheels
+      - build_sdist
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          generate_release_notes: true
+          files: release-assets/*
