@@ -2,7 +2,9 @@
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
 #include "bmmpy/stub.hpp"
+#include "bmmpy/types/candidate.hpp"
 
+#include <bmmpy/apply/greedy_selection.hpp>
 #include <cstdint>
 #include <filesystem>
 #include <nanobind/nanobind.h>
@@ -72,6 +74,22 @@ std::string matrix_repr(const bmmpy::BitMatrix& matrix) {
     return "BitMatrix(rows=" + std::to_string(matrix.rows()) +
            ", cols=" + std::to_string(matrix.cols()) +
            ", weight=" + std::to_string(matrix.weight()) + ")";
+}
+
+std::vector<std::size_t> candidate_selected_rows(const bmmpy::Candidate& candidate) {
+    std::vector<std::size_t> result;
+    result.reserve(candidate.mask_popcount());
+
+    for (std::size_t row : candidate.selected_rows()) {
+        result.push_back(row);
+    }
+
+    return result;
+}
+
+std::string candidate_repr(const bmmpy::Candidate& candidate) {
+    return "Candidate(mask_words=" + std::to_string(candidate.mask.size()) +
+           ", weight=" + std::to_string(candidate.weight) + ")";
 }
 
 } // namespace
@@ -160,6 +178,33 @@ NB_MODULE(_bmmpy, m) {
             nb::arg("path"),
             nb::rv_policy::move)
         .def_static("identity", &bmmpy::BitMatrix::identity, nb::arg("n"), nb::rv_policy::move);
+
+    nb::class_<bmmpy::ApplyResult>(m, "ApplyResult")
+        .def(nb::init<>())
+        .def_rw("applied_count", &bmmpy::ApplyResult::applied_count)
+        .def_rw("weight_improvement", &bmmpy::ApplyResult::weight_improvement);
+
+    nb::class_<bmmpy::Candidate>(m, "Candidate")
+        .def(nb::init<>())
+        .def(nb::init<bmmpy::Candidate::mask_type, std::uint32_t>(),
+             nb::arg("mask"),
+             nb::arg("weight"))
+        .def_rw("mask", &bmmpy::Candidate::mask)
+        .def_rw("weight", &bmmpy::Candidate::weight)
+        .def("__repr__", &candidate_repr)
+        .def("has_row", &bmmpy::Candidate::has_row, nb::arg("row"))
+        .def("mask_popcount", &bmmpy::Candidate::mask_popcount)
+        .def("mask_u64", &bmmpy::Candidate::mask_u64)
+        .def("selected_rows", &candidate_selected_rows)
+        .def_static("from_u64", &bmmpy::Candidate::from_u64, nb::arg("mask"), nb::arg("weight"))
+        .def_static(
+            "from_words",
+            [](const std::vector<std::uint64_t>& mask, std::uint32_t weight) {
+                return bmmpy::Candidate(mask, weight);
+            },
+            nb::arg("mask"),
+            nb::arg("weight"),
+            nb::rv_policy::move);
 
     m.def(
         "fixed_weight_masks_u32",
