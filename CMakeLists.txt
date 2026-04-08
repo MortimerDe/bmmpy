@@ -100,7 +100,11 @@ endif()
 find_package(OpenMP REQUIRED)
 target_link_libraries(bmmpy_core PUBLIC OpenMP::OpenMP_CXX)
 
-find_package(Python 3.9 COMPONENTS Interpreter Development.Module REQUIRED)
+find_package(
+    Python 3.12 REQUIRED
+    COMPONENTS Interpreter Development.Module
+    OPTIONAL_COMPONENTS Development.SABIModule
+)
 
 add_subdirectory(extern/nanobind)
 
@@ -109,6 +113,7 @@ add_subdirectory(extern/nanobind)
 nanobind_add_module(
     _bmmpy
     NB_DOMAIN bmmpy
+    STABLE_ABI
     python/bindings/main.cpp
 )
 
