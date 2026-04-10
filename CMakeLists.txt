@@ -123,6 +123,14 @@ nanobind_add_module(
     python/bindings/main.cpp
 )
 
+nanobind_add_stub(
+    bmmpy_stub
+    MODULE _bmmpy
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy/_bmmpy.pyi"
+    PYTHON_PATH $<TARGET_FILE_DIR:_bmmpy>
+    DEPENDS _bmmpy
+)
+
 target_link_libraries(_bmmpy PRIVATE bmmpy_core)
 
 # Install the native module inside the Python package directory.
