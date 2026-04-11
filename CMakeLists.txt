@@ -121,6 +121,12 @@ nanobind_add_module(
     NB_DOMAIN bmmpy
     STABLE_ABI
     python/bindings/main.cpp
+    python/bindings/bit_matrix.cpp
+    python/bindings/candidate.cpp
+    python/bindings/search.cpp
+    python/bindings/apply.cpp
+    python/bindings/runtime.cpp
+    python/bindings/math.cpp
 )
 
 nanobind_add_stub(
