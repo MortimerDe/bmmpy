@@ -2,6 +2,7 @@
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/row_window.hpp"
 
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 #include <string>
