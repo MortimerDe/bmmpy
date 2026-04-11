@@ -6,9 +6,9 @@ from ._bmmpy import (
     BitMatrix,
     Candidate,
     FwhtSearch as _NativeFwhtSearch,
-    FwhtSearchConfig,
+    FwhtSearchConfig as _NativeFwhtSearchConfig,
     MitmFwhtSearch as _NativeMitmFwhtSearch,
-    MitmFwhtSearchConfig,
+    MitmFwhtSearchConfig as _NativeMitmFwhtSearchConfig,
 )
 
 
@@ -16,7 +16,7 @@ class FwhtSearch:
     __slots__ = ("max_rows", "k", "_impl")
 
     def __init__(self, *, max_rows: int = 16, k: int = 64) -> None:
-        config = FwhtSearchConfig()
+        config = _NativeFwhtSearchConfig()
         config.max_rows = max_rows
         config.k = k
 
@@ -54,7 +54,7 @@ class MitmFwhtSearch:
         max_n_right: int = 1 << 16,
         k_limit: int = 64,
     ) -> None:
-        config = MitmFwhtSearchConfig()
+        config = _NativeMitmFwhtSearchConfig()
         config.initial_capacity_cols = initial_capacity_cols
         config.max_t_left = max_t_left
         config.max_n_right = max_n_right
