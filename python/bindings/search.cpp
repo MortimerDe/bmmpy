@@ -20,7 +20,7 @@ void bind_search(nb::module_& m) {
         .def_rw("initial_capacity_cols", &::bmmpy::MitmFwhtSearchConfig::initial_capacity_cols)
         .def_rw("max_t_left", &::bmmpy::MitmFwhtSearchConfig::max_t_left)
         .def_rw("max_n_right", &::bmmpy::MitmFwhtSearchConfig::max_n_right)
-        .def_rw("k_limit", &::bmmpy::MitmFwhtSearchConfig::k_limit);
+        .def_rw("k", &::bmmpy::MitmFwhtSearchConfig::k);
 
     nb::class_<::bmmpy::FwhtSearch>(m, "FwhtSearch")
         .def(nb::init<::bmmpy::FwhtSearchConfig>(), nb::arg("config") = ::bmmpy::FwhtSearchConfig{})

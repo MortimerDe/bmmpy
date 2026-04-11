@@ -76,7 +76,7 @@ class PublicApiTests(unittest.TestCase):
             initial_capacity_cols=1024,
             max_t_left=20,
             max_n_right=1 << 16,
-            k_limit=8,
+            k=8,
         )
 
         expected = fwht.search(matrix, [0, 1, 2, 3, 4, 5])

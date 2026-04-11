@@ -73,7 +73,7 @@ class MitmFwhtSearch:
         initial_capacity_cols: Initial internal capacity for packed columns.
         max_t_left: Initial limit for the left-side split during search.
         max_n_right: Initial limit for the right-side FWHT space.
-        k_limit: Maximum number of candidates to return.
+        k: Maximum number of candidates to return.
 
     This searcher is intended for larger windows where a meet-in-the-middle
     strategy is more suitable than the direct FWHT approach.
@@ -83,7 +83,7 @@ class MitmFwhtSearch:
         "initial_capacity_cols",
         "max_t_left",
         "max_n_right",
-        "k_limit",
+        "k",
         "_impl",
     )
 
@@ -93,18 +93,18 @@ class MitmFwhtSearch:
         initial_capacity_cols: int = 1024,
         max_t_left: int = 20,
         max_n_right: int = 1 << 16,
-        k_limit: int = 64,
+        k: int = 64,
     ) -> None:
         config = _NativeMitmFwhtSearchConfig()
         config.initial_capacity_cols = initial_capacity_cols
         config.max_t_left = max_t_left
         config.max_n_right = max_n_right
-        config.k_limit = k_limit
+        config.k = k
 
         self.initial_capacity_cols = initial_capacity_cols
         self.max_t_left = max_t_left
         self.max_n_right = max_n_right
-        self.k_limit = k_limit
+        self.k = k
         self._impl = _NativeMitmFwhtSearch(config)
 
     def __repr__(self) -> str:
@@ -113,7 +113,7 @@ class MitmFwhtSearch:
             f"initial_capacity_cols={self.initial_capacity_cols}, "
             f"max_t_left={self.max_t_left}, "
             f"max_n_right={self.max_n_right}, "
-            f"k_limit={self.k_limit})"
+            f"k={self.k})"
         )
 
     def name(self) -> str:

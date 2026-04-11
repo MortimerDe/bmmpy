@@ -14,7 +14,7 @@ struct MitmFwhtSearchConfig {
     std::size_t initial_capacity_cols = 1024;
     std::size_t max_t_left = 20;
     std::size_t max_n_right = std::size_t{1} << 16;
-    std::size_t k_limit = 64;
+    std::size_t k = 64;
 };
 
 class MitmFwhtSearch final : public Searcher {

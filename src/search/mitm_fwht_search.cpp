@@ -60,7 +60,7 @@ MitmFwhtSearch::MitmFwhtSearch(MitmFwhtSearchConfig config) : _config(config) {
     _fwht_buffer.resize(max_n_right, 0);
 
     _col_map.reserve(initial_cols);
-    _candidates.reserve(_config.k_limit);
+    _candidates.reserve(_config.k);
 }
 
 std::pair<std::size_t, std::size_t> MitmFwhtSearch::get_split_info(std::size_t t) noexcept {
@@ -265,7 +265,7 @@ void MitmFwhtSearch::add_result(std::uint64_t mask,
                                 std::int32_t total_weight,
                                 std::int32_t& min_score_threshold,
                                 std::uint32_t& worst_weight) {
-    const std::size_t k = _config.k_limit;
+    const std::size_t k = _config.k;
 
     const Candidate incoming = Candidate::from_u64(mask, weight);
 
@@ -343,7 +343,7 @@ std::vector<Candidate> MitmFwhtSearch::search(const BitMatrix& matrix,
                                               const std::vector<std::size_t>& window_rows) {
     _candidates.clear();
 
-    if (_config.k_limit == 0)
+    if (_config.k == 0)
         return {};
 
     const std::size_t t = window_rows.size();
@@ -402,7 +402,7 @@ std::vector<Candidate> MitmFwhtSearch::search(const BitMatrix& matrix,
             current_x_left, n_right, t_left, total_weight, min_score_threshold, worst_weight);
     }
 
-    if (_candidates.size() < _config.k_limit) {
+    if (_candidates.size() < _config.k) {
         std::sort(_candidates.begin(), _candidates.end(), candidate_less);
     }
 
