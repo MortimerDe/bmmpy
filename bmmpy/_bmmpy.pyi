@@ -1,4 +1,8 @@
-"""Python bindings for bmmpy"""
+"""
+Low-level nanobind bindings for bmmpy.
+
+This module exposes the native core types and algorithms used by the public bmmpy package. Most users should import from bmmpy instead of bmmpy._bmmpy.
+"""
 
 from collections.abc import Iterator, Sequence
 import enum
@@ -9,7 +13,7 @@ from typing import overload
 class RowWindow:
     def __len__(self) -> int: ...
 
-    def __repr__(self) -> "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >": ...
+    def __repr__(self) -> str: ...
 
     @property
     def size(self) -> int: ...

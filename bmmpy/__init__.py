@@ -1,9 +1,34 @@
 """
-bmmpy (binary matrix minimization in Python).
+BMMpy: binary matrix minimization tools for Python.
+-------
 
-bmmpy provides tools for working with binary/bit matrices, including algorithms for finding low-weight linear combinations of rows.
+The public package provides a compact Python API for constructing binary
+matrices, searching for low-weight row combinations inside row windows, and
+applying row transformations in place.
+
+The usual workflow is to build a BitMatrix, select a RowWindow over the rows of
+interest, run a search strategy to obtain Candidate objects, and then apply the
+best transformations with GreedySelection or a higher-level helper such as
+search_apply.
+
+Examples
+--------
+>>> import bmmpy as bmm
+>>> matrix = bmm.BitMatrix(2, 5)
+>>> for col in (0, 2, 4):
+...     matrix[0, col] = True
+...     matrix[1, col] = True
+>>> window = matrix.row_window([0, 1])
+>>> result = bmm.search_apply(
+...     window,
+...     searcher=bmm.FwhtSearch(max_rows=16, k=1),
+...     selector=bmm.GreedySelection(min_gain=1),
+... )
+>>> result.applied_count >= 1
+True
+>>> result.weight_improvement > 0
+True
 """
-
 from __future__ import annotations
 
 from ._bmmpy import (

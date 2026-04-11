@@ -1,7 +1,25 @@
 """
 High-level workflows for bmmpy.
 
-These helpers combine search and apply phases into a single user-facing call.
+These helpers combine search and apply steps into a single user-facing call.
+They are useful when you want a compact end-to-end workflow without manually
+threading candidate lists through your code.
+
+Examples
+--------
+>>> import bmmpy as bmm
+>>> matrix = bmm.BitMatrix(2, 5)
+>>> for col in (0, 2, 4):
+...     matrix[0, col] = True
+...     matrix[1, col] = True
+>>> window = matrix.row_window([0, 1])
+>>> result = bmm.search_apply(
+...     window,
+...     searcher=bmm.FwhtSearch(max_rows=16, k=1),
+...     selector=bmm.GreedySelection(min_gain=1),
+... )
+>>> result.applied_count >= 1
+True
 """
 
 from __future__ import annotations
@@ -30,22 +48,45 @@ def search_apply(
     searcher: SupportsSearch,
     selector: SupportsApply,
 ) -> ApplyResult:
-    """
-    Run search and apply back-to-back on the same row window.
+    """Run search and apply back-to-back on the same row window.
 
-    Args:
-        window: Row window to inspect and update.
-        searcher: Object with a search method returning Candidate objects.
-        selector: Object with an apply method consuming the candidates.
+    Parameters
+    ----------
+    window : RowWindow
+        Window to inspect and update.
+    searcher : SupportsSearch
+        Object with a ``search(window)`` method returning Candidate objects.
+    selector : SupportsApply
+        Object with an ``apply(window, candidates)`` method.
 
-    Returns:
-        An ApplyResult describing the performed updates.
+    Returns
+    -------
+    ApplyResult
+        Summary of the accepted applications.
 
-    Notes:
-        This function mutates the underlying matrix in place.
+    Notes
+    -----
+    This function mutates the underlying matrix in place through ``window``.
+
+    Examples
+    --------
+    >>> import bmmpy as bmm
+    >>> matrix = bmm.BitMatrix(2, 5)
+    >>> for col in (0, 2, 4):
+    ...     matrix[0, col] = True
+    ...     matrix[1, col] = True
+    >>> window = matrix.row_window([0, 1])
+    >>> result = bmm.search_apply(
+    ...     window,
+    ...     searcher=bmm.FwhtSearch(max_rows=16, k=1),
+    ...     selector=bmm.GreedySelection(min_gain=1),
+    ... )
+    >>> result.applied_count >= 1
+    True
+    >>> result.weight_improvement > 0
+    True
     """
     candidates = searcher.search(window)
     return selector.apply(window, candidates)
-
 
 __all__ = ["search_apply"]

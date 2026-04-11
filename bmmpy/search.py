@@ -1,8 +1,20 @@
 """
 Search strategies for bmmpy.
 
-Searchers inspect a window of rows in a BitMatrix and produce Candidate objects ordered by increasing weight.
-The returned candidates can then be applied to the matrix with GreedySelection or another selector.
+Searchers inspect a RowWindow and return Candidate objects ordered by
+nondecreasing weight. The resulting candidates can then be applied to the same window with GreedySelection or another compatible selector.
+
+Examples
+--------
+>>> import bmmpy as bmm
+>>> matrix = bmm.BitMatrix(2, 5)
+>>> for col in (0, 2, 4):
+...     matrix[0, col] = True
+...     matrix[1, col] = True
+>>> window = matrix.row_window([0, 1])
+>>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+>>> candidates[0].mask_u64(), candidates[0].weight
+(3, 0)
 """
 
 from __future__ import annotations
@@ -22,13 +34,37 @@ from ._bmmpy import (
 
 class FwhtSearch:
     """
-    Search for row combinations using the FWHT-based (Fast Walsh-Hadamard Transform) algorithm.
+    Search for low-weight row combinations using a direct FWHT-based algorithm.
 
-    Args:
-        max_rows: Maximum number of rows allowed in the search window.
-        k: Maximum number of candidates to return.
+    Parameters
+    ----------
+    max_rows : int, default=16
+        Maximum number of rows allowed in the search window.
+    k : int, default=64
+        Maximum number of candidates to return.
 
-    Use this searcher for smaller windows (<23) where the direct FWHT approach is appropriate.
+    Notes
+    -----
+    This searcher is intended for smaller windows where a direct
+    Fast Walsh-Hadamard Transform based approach is appropriate.
+
+    Examples
+    --------
+    >>> import bmmpy as bmm
+    >>> matrix = bmm.BitMatrix(2, 5)
+    >>> for col in (0, 2, 4):
+    ...     matrix[0, col] = True
+    ...     matrix[1, col] = True
+    >>> window = matrix.row_window([0, 1])
+    >>> searcher = bmm.FwhtSearch(max_rows=16, k=1)
+    >>> candidates = searcher.search(window)
+    >>> candidates[0].mask_u64(), candidates[0].weight
+    (3, 0)
+
+    See Also
+    --------
+    MitmFwhtSearch
+        Alternative strategy intended for larger search windows.
     """
 
     __slots__ = ("max_rows", "k", "_impl")
@@ -46,37 +82,105 @@ class FwhtSearch:
         return f"FwhtSearch(max_rows={self.max_rows}, k={self.k})"
 
     def name(self) -> str:
-        """Return the native algorithm name."""
+        """Return the short native name of the configured search algorithm.
+
+        Returns
+        -------
+        str
+            Algorithm identifier such as ``"fwht"``.
+        """
         return self._impl.name()
 
     def describe(self, window_size: int) -> str:
-        """Return a short textual description for a given window size."""
+        """Return a short textual description for a given window size.
+
+        Parameters
+        ----------
+        window_size : int
+            Number of rows in the window that will be searched.
+
+        Returns
+        -------
+        str
+            Human-readable description of the configured strategy.
+        """
         return self._impl.describe(window_size)
 
     def search(self, window: RowWindow) -> list[Candidate]:
-        """Search a row window and return candidates ordered by increasing weight.
+        """Search a row window and return candidate row combinations.
 
-        Args:
-            window: Row window to search.
+        Parameters
+        ----------
+        window : RowWindow
+            Window to search.
 
-        Returns:
-            A list of Candidate objects sorted by nondecreasing weight.
+        Returns
+        -------
+        list[Candidate]
+            Candidates ordered by nondecreasing weight. Lower weights correspond to
+            more attractive row combinations.
+
+        Notes
+        -----
+        Candidate row indices are local to ``window``.
+
+        Examples
+        --------
+        >>> import bmmpy as bmm
+        >>> matrix = bmm.BitMatrix(2, 5)
+        >>> for col in (0, 2, 4):
+        ...     matrix[0, col] = True
+        ...     matrix[1, col] = True
+        >>> window = matrix.row_window([0, 1])
+        >>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+        >>> len(candidates)
+        1
+        >>> candidates[0].rows
+        [0, 1]
         """
         return self._impl.search(window)
 
 
 class MitmFwhtSearch:
     """
-    Search for row combinations using the meet-in-the-middle modified FWHT algorithm.
+    Search for low-weight row combinations using a meet-in-the-middle modified FWHT algorithm.
 
-    Args:
-        initial_capacity_cols: Initial internal capacity for packed columns.
-        max_t_left: Initial limit for the left-side split during search.
-        max_n_right: Initial limit for the right-side FWHT space.
-        k: Maximum number of candidates to return.
+    Parameters
+    ----------
+    initial_capacity_cols : int, default=1024
+        Initial internal capacity for packed columns.
+    max_t_left : int, default=20
+        Initial limit for the left-side split used by the algorithm.
+    max_n_right : int, default=65536
+        Initial limit for the right-side FWHT search space.
+    k : int, default=64
+        Maximum number of candidates to return.
 
-    This searcher is intended for larger windows where a meet-in-the-middle
-    strategy is more suitable than the direct FWHT approach.
+    Notes
+    -----
+    This searcher is intended for larger windows where the direct FWHT approach is
+    less suitable.
+
+    Examples
+    --------
+    >>> import bmmpy as bmm
+    >>> matrix = bmm.matrix_from_rows([
+    ...     "110010101001",
+    ...     "101100101100",
+    ...     "011010011001",
+    ...     "111000010111",
+    ...     "000111100011",
+    ...     "101011110000",
+    ... ])
+    >>> window = matrix.row_window([0, 1, 2, 3, 4, 5])
+    >>> candidates = bmm.MitmFwhtSearch(k=8).search(window)
+    >>> len(candidates) > 0
+    True
+
+    See Also
+    --------
+    FwhtSearch
+        Direct FWHT strategy for smaller search windows.
     """
 
     __slots__ = (
@@ -117,22 +221,63 @@ class MitmFwhtSearch:
         )
 
     def name(self) -> str:
-        """Return the native algorithm name."""
+        """Return the short native name of the configured search algorithm.
+
+        Returns
+        -------
+        str
+            Algorithm identifier such as ``"mitm_fwht"``.
+        """
         return self._impl.name()
 
     def describe(self, window_size: int) -> str:
-        """Return a short textual description for a given window size."""
+        """Return a short textual description for a given window size.
+
+        Parameters
+        ----------
+        window_size : int
+            Number of rows in the window that will be searched.
+
+        Returns
+        -------
+        str
+            Human-readable description of the configured strategy.
+        """
         return self._impl.describe(window_size)
 
     def search(self, window: RowWindow) -> list[Candidate]:
-        """
-        Search a row window and return candidates ordered by increasing weight.
+        """Search a row window and return candidate row combinations.
 
-        Args:
-            window: Row window to search.
+        Parameters
+        ----------
+        window : RowWindow
+            Window to search.
 
-        Returns:
-            A list of Candidate objects sorted by nondecreasing weight.
+        Returns
+        -------
+        list[Candidate]
+            Candidates ordered by nondecreasing weight. Lower weights correspond to
+            more attractive row combinations.
+
+        Notes
+        -----
+        Candidate row indices are local to ``window``.
+
+        Examples
+        --------
+        >>> import bmmpy as bmm
+        >>> matrix = bmm.matrix_from_rows([
+        ...     "110010101001",
+        ...     "101100101100",
+        ...     "011010011001",
+        ...     "111000010111",
+        ...     "000111100011",
+        ...     "101011110000",
+        ... ])
+        >>> window = matrix.row_window([0, 1, 2, 3, 4, 5])
+        >>> candidates = bmm.MitmFwhtSearch(k=8).search(window)
+        >>> len(candidates) > 0
+        True
         """
         return self._impl.search(window)
 
