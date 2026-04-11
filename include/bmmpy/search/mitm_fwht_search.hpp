@@ -11,18 +11,17 @@
 namespace bmmpy {
 
 struct MitmFwhtSearchConfig {
-    std::size_t initial_capacity_cols = 1024;
-    std::size_t max_t_left = 20;
-    std::size_t max_n_right = std::size_t{1} << 16;
-    std::size_t k_limit = 64;
+    std::size_t reserve_unique_patterns = 1024;
+    std::size_t reserve_left_rows = 20;
+    std::size_t reserve_right_states = std::size_t{1} << 16;
+    std::size_t max_candidates = 64;
 };
 
 class MitmFwhtSearch final : public Searcher {
 public:
     explicit MitmFwhtSearch(MitmFwhtSearchConfig config = {});
 
-    std::vector<Candidate> search(const BitMatrix& matrix,
-                                  const std::vector<std::size_t>& window_rows) override;
+    std::vector<Candidate> search(const RowWindow& window) override;
 
     const char* name() const noexcept override { return "mitm_fwht"; }
 

@@ -33,6 +33,7 @@ target_sources(
     PRIVATE
         src/stub.cpp
 
+        src/core/row_window.cpp
         src/core/bit_matrix.cpp
         src/core/bit_ops_scalar.cpp
         src/core/bit_ops_dispatch.cpp
@@ -121,6 +122,21 @@ nanobind_add_module(
     NB_DOMAIN bmmpy
     STABLE_ABI
     python/bindings/main.cpp
+    python/bindings/bit_matrix.cpp
+    python/bindings/candidate.cpp
+    python/bindings/search.cpp
+    python/bindings/apply.cpp
+    python/bindings/runtime.cpp
+    python/bindings/math.cpp
+    python/bindings/window.cpp
+)
+
+nanobind_add_stub(
+    bmmpy_stub
+    MODULE _bmmpy
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy/_bmmpy.pyi"
+    PYTHON_PATH $<TARGET_FILE_DIR:_bmmpy>
+    DEPENDS _bmmpy
 )
 
 target_link_libraries(_bmmpy PRIVATE bmmpy_core)

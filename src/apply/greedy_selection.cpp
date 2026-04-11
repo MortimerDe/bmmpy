@@ -10,18 +10,11 @@
 
 namespace bmmpy {
 
-ApplyResult GreedySelection::apply(BitMatrix& matrix,
-                                   const std::vector<std::size_t>& window_rows,
-                                   const std::vector<Candidate>& candidates) {
+ApplyResult GreedySelection::apply(RowWindow& window, const std::vector<Candidate>& candidates) {
 
-    const std::size_t n = window_rows.size();
+    const std::size_t n = window.size();
     if (n > 64)
-        throw std::invalid_argument("window_rows size must be <= 64");
-
-    for (std::size_t row : window_rows) {
-        if (row >= matrix.rows())
-            throw std::out_of_range("window row out of bounds");
-    }
+        throw std::invalid_argument("row window size must be <= 64");
 
     std::array<std::uint64_t, 64> c{};
     for (std::size_t i = 0; i < n; ++i)
@@ -29,7 +22,7 @@ ApplyResult GreedySelection::apply(BitMatrix& matrix,
 
     std::vector<std::uint64_t> current_weights(n);
     for (std::size_t i = 0; i < n; ++i)
-        current_weights[i] = matrix.row_popcount(window_rows[i]);
+        current_weights[i] = window.row_popcount(i);
 
     std::vector<const Candidate*> sorted_candidates;
     sorted_candidates.reserve(candidates.size());
@@ -43,11 +36,10 @@ ApplyResult GreedySelection::apply(BitMatrix& matrix,
         }
     }
 
-    std::stable_sort(sorted_candidates.begin(),
-                     sorted_candidates.end(),
-                     [](const Candidate* lhs, const Candidate* rhs) {
-                         return lhs->weight < rhs->weight;
-                     });
+    std::stable_sort(
+        sorted_candidates.begin(),
+        sorted_candidates.end(),
+        [](const Candidate* lhs, const Candidate* rhs) { return lhs->weight < rhs->weight; });
 
     ApplyResult result;
 
@@ -72,8 +64,7 @@ ApplyResult GreedySelection::apply(BitMatrix& matrix,
                 continue;
 
             const std::uint64_t old_weight = current_weights[r];
-            const std::uint64_t candidate_weight =
-                static_cast<std::uint64_t>(candidate->weight);
+            const std::uint64_t candidate_weight = static_cast<std::uint64_t>(candidate->weight);
 
             if (old_weight <= candidate_weight)
                 continue;
@@ -94,14 +85,13 @@ ApplyResult GreedySelection::apply(BitMatrix& matrix,
         if (best_rows_count == 0)
             continue;
 
-        const std::size_t chosen = _stochastic
-                                       ? best_rows[static_cast<std::size_t>(
-                                             next_random() % best_rows_count)]
-                                       : best_rows[0];
+        const std::size_t chosen =
+            _stochastic ? best_rows[static_cast<std::size_t>(next_random() % best_rows_count)]
+                        : best_rows[0];
 
         for (std::size_t i = 0; i < n; ++i) {
             if (i != chosen && ((a >> i) & 1ULL) != 0)
-                matrix.row_xor(window_rows[chosen], window_rows[i]);
+                window.row_xor(chosen, i);
         }
 
         current_weights[chosen] = static_cast<std::uint64_t>(candidate->weight);

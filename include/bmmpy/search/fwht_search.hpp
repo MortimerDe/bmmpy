@@ -12,15 +12,14 @@ namespace bmmpy {
 
 struct FwhtSearchConfig {
     std::size_t max_rows = 16;
-    std::size_t k = 64;
+    std::size_t max_candidates = 64;
 };
 
 class FwhtSearch final : public Searcher {
 public:
     explicit FwhtSearch(FwhtSearchConfig config = {}) : _config(config) {}
 
-    std::vector<Candidate> search(const BitMatrix& matrix,
-                                  const std::vector<std::size_t>& window_rows) override;
+    std::vector<Candidate> search(const RowWindow& window) override;
     const char* name() const noexcept override { return "fwht"; }
 
 private:

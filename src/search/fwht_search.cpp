@@ -1,5 +1,6 @@
 #include "bmmpy/search/fwht_search.hpp"
 
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
 #include "bmmpy/math/fwht.hpp"
 
@@ -30,10 +31,9 @@ std::uint64_t tail_mask_for_cols(std::size_t cols) noexcept {
 
 } // namespace
 
-std::vector<Candidate> FwhtSearch::search(const BitMatrix& matrix,
-                                          const std::vector<std::size_t>& window_rows) {
-    const std::size_t t = window_rows.size();
-    if (t == 0 || t > _config.max_rows || _config.k == 0)
+std::vector<Candidate> FwhtSearch::search(const RowWindow& window) {
+    const std::size_t t = window.size();
+    if (t == 0 || t > _config.max_rows || _config.max_candidates == 0)
         return {};
 
     if (t > Candidate::k_word_bits) {
@@ -46,22 +46,15 @@ std::vector<Candidate> FwhtSearch::search(const BitMatrix& matrix,
     }
 
     const std::size_t bucket_count = std::size_t{1} << t;
-    const std::size_t words_per_row = matrix.words_per_row();
+    const std::size_t words_per_row = window.words_per_row();
     if (words_per_row == 0)
         return {};
 
-    std::vector<const std::uint64_t*> rows;
-    rows.reserve(t);
-    for (std::size_t row : window_rows) {
-        if (row >= matrix.rows())
-            throw std::out_of_range("window row out of bounds");
-        rows.push_back(matrix.row_words(row));
-    }
-
+    const auto& rows = window.row_ptrs();
     _buckets.assign(bucket_count, 0);
 
     std::uint64_t total_weight = 0;
-    const std::uint64_t tail_mask = tail_mask_for_cols(matrix.cols());
+    const std::uint64_t tail_mask = tail_mask_for_cols(window.cols());
 
     for (std::size_t word_index = 0; word_index < words_per_row; ++word_index) {
         std::uint64_t active = 0;
@@ -99,7 +92,7 @@ std::vector<Candidate> FwhtSearch::search(const BitMatrix& matrix,
 
     fwht_inplace(_buckets.data(), _buckets.size());
 
-    const std::size_t k = _config.k;
+    const std::size_t k = _config.max_candidates;
     std::vector<Candidate> candidates;
     candidates.reserve(std::min(k, bucket_count - 1));
 
