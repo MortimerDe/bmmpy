@@ -9,13 +9,16 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <nanobind/make_iterator.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace nb = nanobind;
@@ -78,6 +81,13 @@ std::string matrix_to_text(const bmmpy::BitMatrix& matrix) {
     return out.str();
 }
 
+std::pair<std::size_t, std::size_t> matrix_index(const nb::tuple& index) {
+    if (index.size() != 2) {
+        throw std::invalid_argument("BitMatrix indices must be a (row, col) tuple");
+    }
+    return {nb::cast<std::size_t>(index[0]), nb::cast<std::size_t>(index[1])};
+}
+
 bmmpy::BitMatrix matrix_from_text(const std::string& text) {
     std::istringstream in(text);
     return bmmpy::BitMatrix::load_text(in);
@@ -120,7 +130,27 @@ NB_MODULE(_bmmpy, m) {
         .def_prop_ro("total_words", &bmmpy::BitMatrix::total_words)
         .def_prop_ro("total_bytes", &bmmpy::BitMatrix::total_bytes)
         .def("__len__", &bmmpy::BitMatrix::rows)
+        .def("__str__", &matrix_to_text)
         .def("__repr__", &matrix_repr)
+        .def(
+            "copy",
+            [](const bmmpy::BitMatrix& matrix) { return bmmpy::BitMatrix(matrix); },
+            nb::rv_policy::move)
+        .def(
+            "__getitem__",
+            [](const bmmpy::BitMatrix& matrix, const nb::tuple& index) {
+                const auto [row, col] = matrix_index(index);
+                return matrix.get(row, col);
+            },
+            nb::arg("index"))
+        .def(
+            "__setitem__",
+            [](bmmpy::BitMatrix& matrix, const nb::tuple& index, bool value) {
+                const auto [row, col] = matrix_index(index);
+                matrix.set(row, col, value);
+            },
+            nb::arg("index"),
+            nb::arg("value"))
         .def("get", &bmmpy::BitMatrix::get, nb::arg("row"), nb::arg("col"))
         .def("set", &bmmpy::BitMatrix::set, nb::arg("row"), nb::arg("col"), nb::arg("value"))
         .def(
@@ -189,10 +219,23 @@ NB_MODULE(_bmmpy, m) {
         .def(nb::init<bmmpy::Candidate::mask_type, std::uint32_t>(),
              nb::arg("mask"),
              nb::arg("weight"))
+        .def("__len__", &bmmpy::Candidate::mask_popcount)
         .def_rw("mask", &bmmpy::Candidate::mask)
         .def_rw("weight", &bmmpy::Candidate::weight)
         .def("__repr__", &candidate_repr)
+        .def("__contains__", &bmmpy::Candidate::has_row, nb::arg("row"))
+        .def(
+            "__iter__",
+            [](const bmmpy::Candidate& candidate) {
+                auto rows = candidate.selected_rows();
+                return nb::make_iterator(nb::type<bmmpy::Candidate>(),
+                                         "selected_row_iterator",
+                                         rows.begin(),
+                                         rows.end());
+            },
+            nb::keep_alive<0, 1>())
         .def("has_row", &bmmpy::Candidate::has_row, nb::arg("row"))
+        .def_prop_ro("rows", &candidate_selected_rows)
         .def("mask_popcount", &bmmpy::Candidate::mask_popcount)
         .def("mask_u64", &bmmpy::Candidate::mask_u64)
         .def("selected_rows", &candidate_selected_rows)

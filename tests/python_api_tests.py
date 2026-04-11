@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import unittest
+
+import bmmpy as bmm
+
+def make_search_matrix() -> bmm.BitMatrix:
+    matrix = bmm.BitMatrix(2, 5)
+    for col in (0, 2, 4):
+        matrix[0, col] = True
+        matrix[1, col] = True
+    return matrix
+
+class PublicApiTests(unittest.TestCase):
+    def test_public_api_hides_configs_and_legacy_helpers(self) -> None:
+        self.assertFalse(hasattr(bmm, "FwhtSearchConfig"))
+        self.assertFalse(hasattr(bmm, "MitmFwhtSearchConfig"))
+        self.assertFalse(hasattr(bmm, "make_fwht_config"))
+        self.assertFalse(hasattr(bmm, "make_mitm_fwht_config"))
+        self.assertFalse(hasattr(bmm, "fwht_search"))
+        self.assertFalse(hasattr(bmm, "mitm_fwht_search"))
+        self.assertFalse(hasattr(bmm, "apply_greedy"))
+
+    def test_bit_matrix_python_sugar(self) -> None:
+        matrix = bmm.matrix_from_rows(["10", "01"])
+
+        self.assertTrue(matrix[0, 0])
+        self.assertFalse(matrix[0, 1])
+
+        matrix[0, 1] = True
+        self.assertEqual(matrix.to_rows(), ["11", "01"])
+        self.assertEqual(str(matrix), matrix.to_text())
+
+        copied = matrix.copy()
+        copied[0, 0] = False
+
+        self.assertEqual(matrix.to_rows(), ["11", "01"])
+        self.assertEqual(copied.to_rows(), ["01", "01"])
+    
+    def test_candidate_python_sugar(self) -> None:
+        candidate = bmm.Candidate.from_u64(0b1011, 7)
+
+        self.assertEqual(len(candidate), 3)
+        self.assertIn(0, candidate)
+        self.assertIn(1, candidate)
+        self.assertIn(3, candidate)
+        self.assertNotIn(2, candidate)
+        self.assertEqual(list(candidate), [0, 1, 3])
+        self.assertEqual(candidate.rows, [0, 1, 3])
+    
+    def test_fwht_search_wrapper(self) -> None:
+        matrix = make_search_matrix()
+        searcher = bmm.FwhtSearch(max_rows=16, k=1)
+
+        candidates = searcher.search(matrix, [0, 1])
+
+        self.assertEqual(searcher.name(), "fwht")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].mask_u64(), 0x3)
+        self.assertEqual(candidates[0].weight, 0)
+    
+    def test_mitm_search_wrapper(self) -> None:
+        matrix = bmm.matrix_from_rows(
+            [
+                "110010101001",
+                "101100101100",
+                "011010011001",
+                "111000010111",
+                "000111100011",
+                "101011110000",
+            ]
+        )
+
+        fwht = bmm.FwhtSearch(max_rows=16, k=8)
+        mitm = bmm.MitmFwhtSearch(
+            initial_capacity_cols=1024,
+            max_t_left=20,
+            max_n_right=1 << 16,
+            k_limit=8,
+        )
+
+        expected = fwht.search(matrix, [0, 1, 2, 3, 4, 5])
+        actual = mitm.search(matrix, [0, 1, 2, 3, 4, 5])
+
+        self.assertEqual(
+            [(candidate.mask_u64(), candidate.weight) for candidate in actual],
+            [(candidate.mask_u64(), candidate.weight) for candidate in expected],
+        )
+
+    def test_search_apply(self) -> None:
+        matrix = make_search_matrix()
+        searcher = bmm.FwhtSearch(max_rows=16, k=1)
+        selector = bmm.GreedySelection(min_gain=1)
+
+        result = bmm.search_apply(
+            matrix,
+            [0, 1],
+            searcher=searcher,
+            selector=selector,
+        )
+
+        self.assertGreaterEqual(result.applied_count, 1)
+        self.assertGreater(result.weight_improvement, 0)
+        self.assertIn(0, [matrix.row_popcount(0), matrix.row_popcount(1)])
+
+
+if __name__ == "__main__":
+    unittest.main()
