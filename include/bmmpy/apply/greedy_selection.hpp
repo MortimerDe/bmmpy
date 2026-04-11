@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/row_window.hpp"
 #include "bmmpy/types/candidate.hpp"
 
 #include <cstddef>
@@ -19,12 +20,10 @@ public:
     GreedySelection(std::uint64_t min_gain,
                     bool stochastic = false,
                     std::uint64_t seed = 0) noexcept
-        : _min_gain(min_gain), _stochastic(stochastic),
-          _prng_state(seed == 0 ? 0xDEADBull : seed) {}
+        : _min_gain(min_gain), _stochastic(stochastic), _prng_state(seed == 0 ? 0xDEADBULL : seed) {
+    }
 
-    ApplyResult apply(BitMatrix& matrix,
-                      const std::vector<std::size_t>& window_rows,
-                      const std::vector<Candidate>& candidates);
+    ApplyResult apply(RowWindow& window, const std::vector<Candidate>& candidates);
 
 private:
     std::uint64_t next_random() noexcept {

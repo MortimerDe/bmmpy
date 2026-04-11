@@ -19,6 +19,8 @@ private:
     MatrixErr _code;
 };
 
+class RowWindow;
+
 class BitMatrix {
 public:
     static constexpr std::size_t k_word_bits = 64;
@@ -69,6 +71,9 @@ public:
 
     void swap_rows(std::size_t r1, std::size_t r2) noexcept;
     std::size_t rank() const;
+
+    RowWindow row_window(const std::vector<std::size_t>& rows);
+    RowWindow row_window(const std::vector<std::size_t>& rows) const;
 
     BitMatrix extract_rows_by_indices(const std::vector<std::size_t>& indices) const;
     void insert_rows_by_indices(const BitMatrix& source, const std::vector<std::size_t>& indices);

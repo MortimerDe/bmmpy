@@ -12,6 +12,7 @@ from collections.abc import Iterable
 from ._bmmpy import (
     BitMatrix,
     Candidate,
+    RowWindow,
     FwhtSearch as _NativeFwhtSearch,
     FwhtSearchConfig as _NativeFwhtSearchConfig,
     MitmFwhtSearch as _NativeMitmFwhtSearch,
@@ -52,17 +53,16 @@ class FwhtSearch:
         """Return a short textual description for a given window size."""
         return self._impl.describe(window_size)
 
-    def search(self, matrix: BitMatrix, window_rows: Iterable[int]) -> list[Candidate]:
+    def search(self, window: RowWindow) -> list[Candidate]:
         """Search a row window and return candidates ordered by increasing weight.
 
         Args:
-            matrix: Source matrix.
-            window_rows: Row indices that define the search window.
+            window: Row window to search.
 
         Returns:
             A list of Candidate objects sorted by nondecreasing weight.
         """
-        return self._impl.search(matrix, list(window_rows))
+        return self._impl.search(window)
 
 
 class MitmFwhtSearch:
@@ -124,18 +124,17 @@ class MitmFwhtSearch:
         """Return a short textual description for a given window size."""
         return self._impl.describe(window_size)
 
-    def search(self, matrix: BitMatrix, window_rows: Iterable[int]) -> list[Candidate]:
+    def search(self, window: RowWindow) -> list[Candidate]:
         """
         Search a row window and return candidates ordered by increasing weight.
 
         Args:
-            matrix: Source matrix.
-            window_rows: Row indices that define the search window.
+            window: Row window to search.
 
         Returns:
             A list of Candidate objects sorted by nondecreasing weight.
         """
-        return self._impl.search(matrix, list(window_rows))
+        return self._impl.search(window)
 
 
 __all__ = ["FwhtSearch", "MitmFwhtSearch"]

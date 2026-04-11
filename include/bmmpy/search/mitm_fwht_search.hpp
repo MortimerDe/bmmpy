@@ -21,8 +21,7 @@ class MitmFwhtSearch final : public Searcher {
 public:
     explicit MitmFwhtSearch(MitmFwhtSearchConfig config = {});
 
-    std::vector<Candidate> search(const BitMatrix& matrix,
-                                  const std::vector<std::size_t>& window_rows) override;
+    std::vector<Candidate> search(const RowWindow& window) override;
 
     const char* name() const noexcept override { return "mitm_fwht"; }
 

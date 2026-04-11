@@ -1,5 +1,6 @@
 #include "bmmpy/search/mitm_fwht_search.hpp"
 
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
 #include "bmmpy/math/fwht.hpp"
 
@@ -339,14 +340,13 @@ void MitmFwhtSearch::process_candidate(std::uint32_t x_left,
     }
 }
 
-std::vector<Candidate> MitmFwhtSearch::search(const BitMatrix& matrix,
-                                              const std::vector<std::size_t>& window_rows) {
+std::vector<Candidate> MitmFwhtSearch::search(const RowWindow& window) {
     _candidates.clear();
 
     if (_config.k == 0)
         return {};
 
-    const std::size_t t = window_rows.size();
+    const std::size_t t = window.size();
     if (t == 0)
         return {};
 
@@ -364,20 +364,13 @@ std::vector<Candidate> MitmFwhtSearch::search(const BitMatrix& matrix,
         throw std::invalid_argument("MitmFwhtSearch: split dimensions must be < 31");
     }
 
-    const std::size_t words_per_row = matrix.words_per_row();
+    const std::size_t words_per_row = window.words_per_row();
     if (words_per_row == 0)
         return {};
 
-    std::vector<const std::uint64_t*> rows;
-    rows.reserve(t);
-    for (std::size_t row : window_rows) {
-        if (row >= matrix.rows())
-            throw std::out_of_range("window row out of bounds");
-        rows.push_back(matrix.row_words(row));
-    }
-
+    const auto& rows = window.row_ptrs();
     const auto [unique_cols, total_weight] =
-        prepare_columns(rows, words_per_row, matrix.cols(), t_left);
+        prepare_columns(rows, words_per_row, window.cols(), t_left);
 
     if (unique_cols == 0)
         return {};

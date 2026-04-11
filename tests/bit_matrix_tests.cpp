@@ -1,4 +1,5 @@
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/row_window.hpp"
 
 #include <array>
 #include <cstdint>
@@ -98,6 +99,18 @@ void expect_matrix_error(Fn&& fn, MatrixErr expected_code, std::string_view cont
     }
 
     fail(std::string(context) + ": expected MatrixError");
+}
+
+template <typename Fn> void expect_invalid_argument(Fn&& fn, std::string_view context) {
+    try {
+        fn();
+    } catch (const std::invalid_argument&) {
+        return;
+    } catch (const std::exception& ex) {
+        fail(std::string(context) + ": expected std::invalid_argument, got: " + ex.what());
+    }
+
+    fail(std::string(context) + ": expected std::invalid_argument");
 }
 
 std::filesystem::path unique_test_path(std::string_view suffix) {
@@ -215,6 +228,29 @@ void test_rank_and_row_selection() {
 
     target.insert_rows_by_indices(extracted, {0, 2});
     expect_rows(target, {"00010", "11111", "01000", "11111"});
+}
+
+void test_row_window_view() {
+    BitMatrix source = matrix_from_rows({
+        "10000",
+        "01000",
+        "00100",
+        "00010",
+    });
+
+    auto window = source.row_window({3, 1});
+    require(window.size() == 2, "row window size mismatch");
+    require(window.cols() == 5, "row window cols mismatch");
+    require(window.global_row(0) == 3, "row window global row 0 mismatch");
+    require(window.global_row(1) == 1, "row window global row 1 mismatch");
+    require(window.row_popcount(0) == 1, "row window row_popcount mismatch");
+    expect_rows(window.materialize(), {"00010", "01000"});
+
+    window.row_xor(0, 1);
+    expect_rows(source, {"10000", "01000", "00100", "01010"});
+
+    expect_out_of_range([&] { (void)source.row_window({4}); }, "row window out of bounds");
+    expect_invalid_argument([&] { (void)source.row_window({1, 1}); }, "row window duplicate rows");
 }
 
 void test_copy_from_words_and_exceptions() {
@@ -377,7 +413,7 @@ int main() {
          &test_binary_io_roundtrip_with_unpadded_payload},
         {"text_io_exceptions", &test_text_io_exceptions},
         {"binary_io_exceptions", &test_binary_io_exceptions},
-
+        {"row_window_view", &test_row_window_view},
     };
 
     for (const TestCase& test : tests) {

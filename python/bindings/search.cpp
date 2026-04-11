@@ -1,4 +1,5 @@
 #include "bindings.hpp"
+#include "bmmpy/core/row_window.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/mitm_fwht_search.hpp"
 
@@ -26,14 +27,14 @@ void bind_search(nb::module_& m) {
         .def(nb::init<::bmmpy::FwhtSearchConfig>(), nb::arg("config") = ::bmmpy::FwhtSearchConfig{})
         .def("name", &::bmmpy::FwhtSearch::name)
         .def("describe", &::bmmpy::FwhtSearch::describe, nb::arg("window_size"))
-        .def("search", &::bmmpy::FwhtSearch::search, nb::arg("matrix"), nb::arg("window_rows"));
+        .def("search", &::bmmpy::FwhtSearch::search, nb::arg("window"));
 
     nb::class_<::bmmpy::MitmFwhtSearch>(m, "MitmFwhtSearch")
         .def(nb::init<::bmmpy::MitmFwhtSearchConfig>(),
              nb::arg("config") = ::bmmpy::MitmFwhtSearchConfig{})
         .def("name", &::bmmpy::MitmFwhtSearch::name)
         .def("describe", &::bmmpy::MitmFwhtSearch::describe, nb::arg("window_size"))
-        .def("search", &::bmmpy::MitmFwhtSearch::search, nb::arg("matrix"), nb::arg("window_rows"));
+        .def("search", &::bmmpy::MitmFwhtSearch::search, nb::arg("window"));
 }
 
 } // namespace bmmpy::bindings

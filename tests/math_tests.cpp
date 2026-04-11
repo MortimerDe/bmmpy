@@ -185,7 +185,8 @@ void test_fwht_search_finds_best_candidate() {
     }
 
     bmmpy::FwhtSearch search;
-    const auto candidates = search.search(matrix, {0, 1});
+    const auto window = matrix.row_window({0, 1});
+    const auto candidates = search.search(window);
 
     require(candidates.size() == 3, "fwht_search candidate count");
     require(candidates[0].mask_u64() == 0x3ull, "fwht_search best mask");
@@ -204,7 +205,8 @@ void test_fwht_search_respects_k() {
     }
 
     bmmpy::FwhtSearch search({16, 1});
-    const auto candidates = search.search(matrix, {0, 1});
+    const auto window = matrix.row_window({0, 1});
+    const auto candidates = search.search(window);
 
     require(candidates.size() == 1, "fwht_search k limit");
     require(candidates[0].mask_u64() == 0x3ull, "fwht_search k best mask");
@@ -215,7 +217,7 @@ void test_fwht_search_window_bounds() {
     bmmpy::BitMatrix matrix(1, 1);
     bmmpy::FwhtSearch search;
 
-    expect_out_of_range([&] { (void)search.search(matrix, {1}); }, "fwht_search window bounds");
+    expect_out_of_range([&] { (void)matrix.row_window({1}); }, "row_window bounds");
 }
 
 void test_searcher_interface_dispatch() {
@@ -230,7 +232,8 @@ void test_searcher_interface_dispatch() {
 
     require(std::string_view(searcher->name()) == "fwht", "searcher name");
 
-    const auto candidates = searcher->search(matrix, {0, 1});
+    const auto window = matrix.row_window({0, 1});
+    const auto candidates = searcher->search(window);
     require(candidates.size() == 1, "searcher candidate count");
     require(candidates[0].mask_u64() == 0x3ull, "searcher best mask");
     require(candidates[0].weight == 0, "searcher best weight");
@@ -251,8 +254,9 @@ void test_mitm_fwht_matches_fwht_search() {
     bmmpy::FwhtSearch fwht({16, 8});
     bmmpy::MitmFwhtSearch mitm(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 8});
 
-    const auto expected = fwht.search(matrix, window_rows);
-    const auto actual = mitm.search(matrix, window_rows);
+    const auto window = matrix.row_window(window_rows);
+    const auto expected = fwht.search(window);
+    const auto actual = mitm.search(window);
 
     require_same_candidates(actual, expected, "mitm_fwht matches fwht");
 }
@@ -265,14 +269,16 @@ void test_mitm_fwht_searcher_interface_dispatch() {
     });
 
     bmmpy::FwhtSearch baseline({16, 4});
-    const auto expected = baseline.search(matrix, {0, 1, 2});
+    const auto window = matrix.row_window({0, 1, 2});
+    const auto expected = baseline.search(window);
 
     std::unique_ptr<bmmpy::Searcher> searcher = std::make_unique<bmmpy::MitmFwhtSearch>(
         bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 4});
 
     require(std::string_view(searcher->name()) == "mitm_fwht", "mitm searcher name");
 
-    const auto actual = searcher->search(matrix, {0, 1, 2});
+    const auto dispatch_window = matrix.row_window({0, 1, 2});
+    const auto actual = searcher->search(dispatch_window);
     require_same_candidates(actual, expected, "mitm searcher dispatch");
 }
 
