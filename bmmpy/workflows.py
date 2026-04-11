@@ -1,3 +1,9 @@
+"""
+High-level workflows for bmmpy.
+
+These helpers combine search and apply phases into a single user-facing call.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -26,6 +32,21 @@ def search_apply(
     searcher: SupportsSearch,
     selector: SupportsApply,
 ) -> ApplyResult:
+    """
+    Run search and apply back-to-back on the same row window.
+
+    Args:
+        matrix: Matrix to inspect and update.
+        window_rows: Row indices that define the active window.
+        searcher: Object with a search method returning Candidate objects.
+        selector: Object with an apply method consuming the candidates.
+
+    Returns:
+        An ApplyResult describing the performed updates.
+
+    Notes:
+        This function mutates matrix in place.
+    """
     rows = list(window_rows)
     candidates = searcher.search(matrix, rows)
     return selector.apply(matrix, rows, candidates)

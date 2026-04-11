@@ -1,3 +1,11 @@
+"""
+Apply strategies for bmmpy.
+
+Selectors consume Candidate objects and update a BitMatrix in place.
+GreedySelection is the current built-in strategy for choosing beneficial row
+transformations.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -11,6 +19,17 @@ from ._bmmpy import (
 
 
 class GreedySelection:
+    """
+    Apply candidates greedily to reduce row weight.
+
+    Args:
+        min_gain: Minimum required improvement for an application to be accepted.
+        stochastic: If true, randomize candidate and row choice among valid options.
+        seed: Random seed used when stochastic is enabled.
+
+    The selector mutates the input matrix in place.
+    """
+
     __slots__ = ("min_gain", "stochastic", "seed", "_impl")
 
     def __init__(self, min_gain: int, *, stochastic: bool = False, seed: int = 0) -> None:
@@ -33,6 +52,20 @@ class GreedySelection:
         window_rows: Iterable[int],
         candidates: Iterable[Candidate],
     ) -> ApplyResult:
+        """
+        Apply candidates to a matrix in place.
+
+        Args:
+            matrix: Matrix to update.
+            window_rows: Row indices that define the active window.
+            candidates: Candidate objects to evaluate.
+        
+        Returns:
+            An ApplyResult describing how many changes were applied and  total weight improvement.
+
+        Notes:
+            This method mutates matrix in place.
+        """
         return self._impl.apply(matrix, list(window_rows), list(candidates))
 
 

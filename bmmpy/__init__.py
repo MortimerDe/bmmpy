@@ -1,3 +1,9 @@
+"""
+bmmpy (binary matrix minimization in Python).
+
+bmmpy provides tools for working with binary/bit matrices, including algorithms for finding low-weight linear combinations of rows.
+"""
+
 from __future__ import annotations
 
 from ._bmmpy import (

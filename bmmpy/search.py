@@ -1,3 +1,10 @@
+"""
+Search strategies for bmmpy.
+
+Searchers inspect a window of rows in a BitMatrix and produce Candidate objects ordered by increasing weight.
+The returned candidates can then be applied to the matrix with GreedySelection or another selector.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -13,6 +20,16 @@ from ._bmmpy import (
 
 
 class FwhtSearch:
+    """
+    Search for row combinations using the FWHT-based (Fast Walsh-Hadamard Transform) algorithm.
+
+    Args:
+        max_rows: Maximum number of rows allowed in the search window.
+        k: Maximum number of candidates to return.
+
+    Use this searcher for smaller windows (<23) where the direct FWHT approach is appropriate.
+    """
+
     __slots__ = ("max_rows", "k", "_impl")
 
     def __init__(self, *, max_rows: int = 16, k: int = 64) -> None:
@@ -28,16 +45,40 @@ class FwhtSearch:
         return f"FwhtSearch(max_rows={self.max_rows}, k={self.k})"
 
     def name(self) -> str:
+        """Return the native algorithm name."""
         return self._impl.name()
 
     def describe(self, window_size: int) -> str:
+        """Return a short textual description for a given window size."""
         return self._impl.describe(window_size)
 
     def search(self, matrix: BitMatrix, window_rows: Iterable[int]) -> list[Candidate]:
+        """Search a row window and return candidates ordered by increasing weight.
+
+        Args:
+            matrix: Source matrix.
+            window_rows: Row indices that define the search window.
+
+        Returns:
+            A list of Candidate objects sorted by nondecreasing weight.
+        """
         return self._impl.search(matrix, list(window_rows))
 
 
 class MitmFwhtSearch:
+    """
+    Search for row combinations using the meet-in-the-middle modified FWHT algorithm.
+
+    Args:
+        initial_capacity_cols: Initial internal capacity for packed columns.
+        max_t_left: Initial limit for the left-side split during search.
+        max_n_right: Initial limit for the right-side FWHT space.
+        k_limit: Maximum number of candidates to return.
+
+    This searcher is intended for larger windows where a meet-in-the-middle
+    strategy is more suitable than the direct FWHT approach.
+    """
+
     __slots__ = (
         "initial_capacity_cols",
         "max_t_left",
@@ -76,12 +117,24 @@ class MitmFwhtSearch:
         )
 
     def name(self) -> str:
+        """Return the native algorithm name."""
         return self._impl.name()
 
     def describe(self, window_size: int) -> str:
+        """Return a short textual description for a given window size."""
         return self._impl.describe(window_size)
 
     def search(self, matrix: BitMatrix, window_rows: Iterable[int]) -> list[Candidate]:
+        """
+        Search a row window and return candidates ordered by increasing weight.
+
+        Args:
+            matrix: Source matrix.
+            window_rows: Row indices that define the search window.
+
+        Returns:
+            A list of Candidate objects sorted by nondecreasing weight.
+        """
         return self._impl.search(matrix, list(window_rows))
 
 
