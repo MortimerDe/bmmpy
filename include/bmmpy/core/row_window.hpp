@@ -1,12 +1,12 @@
 #pragma once
 
-#include "bmmpy/core/bit_matrix.hpp"
-
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
 namespace bmmpy {
+
+class BitMatrix;
 
 class RowWindow {
 public:

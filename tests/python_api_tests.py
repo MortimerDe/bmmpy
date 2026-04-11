@@ -20,6 +20,7 @@ class PublicApiTests(unittest.TestCase):
         self.assertFalse(hasattr(bmm, "fwht_search"))
         self.assertFalse(hasattr(bmm, "mitm_fwht_search"))
         self.assertFalse(hasattr(bmm, "apply_greedy"))
+        self.assertTrue(hasattr(bmm, "RowWindow"))
 
     def test_bit_matrix_python_sugar(self) -> None:
         matrix = bmm.matrix_from_rows(["10", "01"])
@@ -36,6 +37,13 @@ class PublicApiTests(unittest.TestCase):
 
         self.assertEqual(matrix.to_rows(), ["11", "01"])
         self.assertEqual(copied.to_rows(), ["01", "01"])
+
+        window = matrix.row_window([1, 0])
+        self.assertIsInstance(window, bmm.RowWindow)
+        self.assertEqual(len(window), 2)
+        self.assertEqual(window.cols, 2)
+        self.assertEqual(window.rows, [1, 0])
+        self.assertEqual(window.materialize().to_rows(), ["01", "11"])
     
     def test_candidate_python_sugar(self) -> None:
         candidate = bmm.Candidate.from_u64(0b1011, 7)
@@ -50,9 +58,10 @@ class PublicApiTests(unittest.TestCase):
     
     def test_fwht_search_wrapper(self) -> None:
         matrix = make_search_matrix()
+        window = matrix.row_window([0, 1])
         searcher = bmm.FwhtSearch(max_rows=16, k=1)
 
-        candidates = searcher.search(matrix, [0, 1])
+        candidates = searcher.search(window)
 
         self.assertEqual(searcher.name(), "fwht")
         self.assertEqual(len(candidates), 1)
@@ -79,8 +88,9 @@ class PublicApiTests(unittest.TestCase):
             k=8,
         )
 
-        expected = fwht.search(matrix, [0, 1, 2, 3, 4, 5])
-        actual = mitm.search(matrix, [0, 1, 2, 3, 4, 5])
+        window = matrix.row_window([0, 1, 2, 3, 4, 5])
+        expected = fwht.search(window)
+        actual = mitm.search(window)
 
         self.assertEqual(
             [(candidate.mask_u64(), candidate.weight) for candidate in actual],
@@ -92,9 +102,9 @@ class PublicApiTests(unittest.TestCase):
         searcher = bmm.FwhtSearch(max_rows=16, k=1)
         selector = bmm.GreedySelection(min_gain=1)
 
+        window = matrix.row_window([0, 1])
         result = bmm.search_apply(
-            matrix,
-            [0, 1],
+            window,
             searcher=searcher,
             selector=selector,
         )

@@ -2,6 +2,7 @@
 
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
 #include "bmmpy/core/detail/bit_ops.hpp"
+#include "bmmpy/core/row_window.hpp"
 
 #include <algorithm>
 #include <array>
@@ -357,6 +358,14 @@ BitMatrix BitMatrix::extract_rows_by_indices(const std::vector<std::size_t>& ind
             result.row_ptr_unchecked(dst), row_ptr_unchecked(src), _stride * sizeof(std::uint64_t));
     }
     return result;
+}
+
+RowWindow BitMatrix::row_window(const std::vector<std::size_t>& rows) {
+    return RowWindow(*this, rows);
+}
+
+RowWindow BitMatrix::row_window(const std::vector<std::size_t>& rows) const {
+    return RowWindow(*this, rows);
 }
 
 void BitMatrix::insert_rows_by_indices(const BitMatrix& source,

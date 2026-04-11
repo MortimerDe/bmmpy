@@ -4,11 +4,14 @@
 
 namespace bmmpy::bindings {
 
-void bind_bit_matrix(nanobind::module_& m);
-void bind_candidate(nanobind::module_& m);
-void bind_search(nanobind::module_& m);
-void bind_apply(nanobind::module_& m);
-void bind_runtime(nanobind::module_& m);
-void bind_math(nanobind::module_& m);
+namespace nb = nanobind;
 
-}
+void bind_window(nb::module_& m);
+void bind_bit_matrix(nb::module_& m);
+void bind_candidate(nb::module_& m);
+void bind_search(nb::module_& m);
+void bind_apply(nb::module_& m);
+void bind_runtime(nb::module_& m);
+void bind_math(nb::module_& m);
+
+} // namespace bmmpy::bindings

@@ -14,6 +14,7 @@ from ._bmmpy import (
     ApplyResult,
     BitMatrix,
     Candidate,
+    RowWindow,
     GreedySelection as _NativeGreedySelection,
 )
 
@@ -48,25 +49,23 @@ class GreedySelection:
 
     def apply(
         self,
-        matrix: BitMatrix,
-        window_rows: Iterable[int],
+        window: RowWindow,
         candidates: Iterable[Candidate],
     ) -> ApplyResult:
         """
         Apply candidates to a matrix in place.
 
         Args:
-            matrix: Matrix to update.
-            window_rows: Row indices that define the active window.
+            window: Row window to update through the underlying matrix.
             candidates: Candidate objects to evaluate.
         
         Returns:
             An ApplyResult describing how many changes were applied and  total weight improvement.
 
         Notes:
-            This method mutates matrix in place.
+            This method mutates the underlying matrix in place.
         """
-        return self._impl.apply(matrix, list(window_rows), list(candidates))
+        return self._impl.apply(window, list(candidates))
 
 
 __all__ = ["GreedySelection"]

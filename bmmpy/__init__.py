@@ -21,7 +21,7 @@ from ._bmmpy import (
 )
 from .apply import GreedySelection
 from .candidate import Candidate
-from .matrix import BitMatrix, matrix_from_rows
+from .matrix import BitMatrix, RowWindow, matrix_from_rows
 from .search import FwhtSearch, MitmFwhtSearch
 from .workflows import search_apply
 
@@ -34,6 +34,7 @@ __all__ = [
     "MatrixErr",
     "MatrixError",
     "MitmFwhtSearch",
+    "RowWindow",
     "RuntimeFeatures",
     "add",
     "fixed_weight_masks_u32",

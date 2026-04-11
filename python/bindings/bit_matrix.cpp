@@ -1,6 +1,7 @@
 #include "bmmpy/core/bit_matrix.hpp"
 
 #include "bindings.hpp"
+#include "bmmpy/core/row_window.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -158,6 +159,14 @@ void bind_bit_matrix(nb::module_& m) {
              &::bmmpy::BitMatrix::extract_rows_by_indices,
              nb::arg("indices"),
              nb::rv_policy::move)
+        .def(
+            "row_window",
+            [](::bmmpy::BitMatrix& matrix, const std::vector<std::size_t>& rows) {
+                return matrix.row_window(rows);
+            },
+            nb::arg("rows"),
+            nb::keep_alive<0, 1>(),
+            nb::rv_policy::move)
         .def("insert_rows_by_indices",
              &::bmmpy::BitMatrix::insert_rows_by_indices,
              nb::arg("source"),

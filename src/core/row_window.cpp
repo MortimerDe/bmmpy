@@ -1,5 +1,7 @@
 #include "bmmpy/core/row_window.hpp"
 
+#include "bmmpy/core/bit_matrix.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 #include <utility>

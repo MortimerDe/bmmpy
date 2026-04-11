@@ -33,6 +33,7 @@ target_sources(
     PRIVATE
         src/stub.cpp
 
+        src/core/row_window.cpp
         src/core/bit_matrix.cpp
         src/core/bit_ops_scalar.cpp
         src/core/bit_ops_dispatch.cpp
@@ -127,6 +128,7 @@ nanobind_add_module(
     python/bindings/apply.cpp
     python/bindings/runtime.cpp
     python/bindings/math.cpp
+    python/bindings/window.cpp
 )
 
 nanobind_add_stub(

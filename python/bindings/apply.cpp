@@ -1,5 +1,6 @@
 #include "bindings.hpp"
 #include "bmmpy/apply/greedy_selection.hpp"
+#include "bmmpy/core/row_window.hpp"
 
 #include <cstdint>
 #include <nanobind/stl/vector.h>
@@ -19,11 +20,7 @@ void bind_apply(nb::module_& m) {
              nb::arg("min_gain"),
              nb::arg("stochastic") = false,
              nb::arg("seed") = 0)
-        .def("apply",
-             &::bmmpy::GreedySelection::apply,
-             nb::arg("matrix"),
-             nb::arg("window_rows"),
-             nb::arg("candidates"));
+        .def("apply", &::bmmpy::GreedySelection::apply, nb::arg("window"), nb::arg("candidates"));
 }
 
 } // namespace bmmpy::bindings
