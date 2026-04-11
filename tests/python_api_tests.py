@@ -59,7 +59,7 @@ class PublicApiTests(unittest.TestCase):
     def test_fwht_search_wrapper(self) -> None:
         matrix = make_search_matrix()
         window = matrix.row_window([0, 1])
-        searcher = bmm.FwhtSearch(max_rows=16, k=1)
+        searcher = bmm.FwhtSearch(max_rows=16, max_candidates=1)
 
         candidates = searcher.search(window)
 
@@ -80,12 +80,9 @@ class PublicApiTests(unittest.TestCase):
             ]
         )
 
-        fwht = bmm.FwhtSearch(max_rows=16, k=8)
+        fwht = bmm.FwhtSearch(max_rows=16, max_candidates=8)
         mitm = bmm.MitmFwhtSearch(
-            initial_capacity_cols=1024,
-            max_t_left=20,
-            max_n_right=1 << 16,
-            k=8,
+            max_candidates=8,
         )
 
         window = matrix.row_window([0, 1, 2, 3, 4, 5])
@@ -99,7 +96,7 @@ class PublicApiTests(unittest.TestCase):
 
     def test_search_apply(self) -> None:
         matrix = make_search_matrix()
-        searcher = bmm.FwhtSearch(max_rows=16, k=1)
+        searcher = bmm.FwhtSearch(max_rows=16, max_candidates=1)
         selector = bmm.GreedySelection(min_gain=1)
 
         window = matrix.row_window([0, 1])

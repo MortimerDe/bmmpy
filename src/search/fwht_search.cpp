@@ -33,7 +33,7 @@ std::uint64_t tail_mask_for_cols(std::size_t cols) noexcept {
 
 std::vector<Candidate> FwhtSearch::search(const RowWindow& window) {
     const std::size_t t = window.size();
-    if (t == 0 || t > _config.max_rows || _config.k == 0)
+    if (t == 0 || t > _config.max_rows || _config.max_candidates == 0)
         return {};
 
     if (t > Candidate::k_word_bits) {
@@ -92,7 +92,7 @@ std::vector<Candidate> FwhtSearch::search(const RowWindow& window) {
 
     fwht_inplace(_buckets.data(), _buckets.size());
 
-    const std::size_t k = _config.k;
+    const std::size_t k = _config.max_candidates;
     std::vector<Candidate> candidates;
     candidates.reserve(std::min(k, bucket_count - 1));
 

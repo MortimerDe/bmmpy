@@ -12,17 +12,14 @@ Examples
 ...     matrix[0, col] = True
 ...     matrix[1, col] = True
 >>> window = matrix.row_window([0, 1])
->>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+>>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
 >>> candidates[0].mask_u64(), candidates[0].weight
 (3, 0)
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 from ._bmmpy import (
-    BitMatrix,
     Candidate,
     RowWindow,
     FwhtSearch as _NativeFwhtSearch,
@@ -40,7 +37,7 @@ class FwhtSearch:
     ----------
     max_rows : int, default=16
         Maximum number of rows allowed in the search window.
-    k : int, default=64
+    max_candidates : int, default=64
         Maximum number of candidates to return.
 
     Notes
@@ -56,7 +53,7 @@ class FwhtSearch:
     ...     matrix[0, col] = True
     ...     matrix[1, col] = True
     >>> window = matrix.row_window([0, 1])
-    >>> searcher = bmm.FwhtSearch(max_rows=16, k=1)
+    >>> searcher = bmm.FwhtSearch(max_rows=16, max_candidates=1)
     >>> candidates = searcher.search(window)
     >>> candidates[0].mask_u64(), candidates[0].weight
     (3, 0)
@@ -67,19 +64,19 @@ class FwhtSearch:
         Alternative strategy intended for larger search windows.
     """
 
-    __slots__ = ("max_rows", "k", "_impl")
+    __slots__ = ("max_rows", "max_candidates", "_impl")
 
-    def __init__(self, *, max_rows: int = 16, k: int = 64) -> None:
+    def __init__(self, *, max_rows: int = 16, max_candidates: int = 64) -> None:
         config = _NativeFwhtSearchConfig()
         config.max_rows = max_rows
-        config.k = k
+        config.max_candidates = max_candidates
 
         self.max_rows = max_rows
-        self.k = k
+        self.max_candidates = max_candidates
         self._impl = _NativeFwhtSearch(config)
 
     def __repr__(self) -> str:
-        return f"FwhtSearch(max_rows={self.max_rows}, k={self.k})"
+        return f"FwhtSearch(max_rows={self.max_rows}, max_candidates={self.max_candidates})"
 
     def name(self) -> str:
         """Return the short native name of the configured search algorithm.
@@ -90,21 +87,6 @@ class FwhtSearch:
             Algorithm identifier such as ``"fwht"``.
         """
         return self._impl.name()
-
-    def describe(self, window_size: int) -> str:
-        """Return a short textual description for a given window size.
-
-        Parameters
-        ----------
-        window_size : int
-            Number of rows in the window that will be searched.
-
-        Returns
-        -------
-        str
-            Human-readable description of the configured strategy.
-        """
-        return self._impl.describe(window_size)
 
     def search(self, window: RowWindow) -> list[Candidate]:
         """Search a row window and return candidate row combinations.
@@ -120,6 +102,11 @@ class FwhtSearch:
             Candidates ordered by nondecreasing weight. Lower weights correspond to
             more attractive row combinations.
 
+        Raises
+        -----
+        ValueError
+            If the window contains more than ``max_rows`` rows.
+            
         Notes
         -----
         Candidate row indices are local to ``window``.
@@ -132,12 +119,19 @@ class FwhtSearch:
         ...     matrix[0, col] = True
         ...     matrix[1, col] = True
         >>> window = matrix.row_window([0, 1])
-        >>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+        >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
         >>> len(candidates)
         1
         >>> candidates[0].rows
         [0, 1]
         """
+
+        window_size = len(window)
+        if window_size > self.max_rows:
+            raise ValueError(
+                f"Window has {window_size} rows, which exceeds the configured "
+                f"max_rows={self.max_rows} limit for this searcher."
+            )
         return self._impl.search(window)
 
 
@@ -147,19 +141,12 @@ class MitmFwhtSearch:
 
     Parameters
     ----------
-    initial_capacity_cols : int, default=1024
-        Initial internal capacity for packed columns.
-    max_t_left : int, default=20
-        Initial limit for the left-side split used by the algorithm.
-    max_n_right : int, default=65536
-        Initial limit for the right-side FWHT search space.
-    k : int, default=64
+    max_candidates : int, default=64
         Maximum number of candidates to return.
 
     Notes
     -----
-    This searcher is intended for larger windows where the direct FWHT approach is
-    less suitable.
+    This searcher is intended for larger windows where the direct FWHT approach is less suitable.
 
     Examples
     --------
@@ -173,7 +160,7 @@ class MitmFwhtSearch:
     ...     "101011110000",
     ... ])
     >>> window = matrix.row_window([0, 1, 2, 3, 4, 5])
-    >>> candidates = bmm.MitmFwhtSearch(k=8).search(window)
+    >>> candidates = bmm.MitmFwhtSearch(max_candidates=8).search(window)
     >>> len(candidates) > 0
     True
 
@@ -184,40 +171,25 @@ class MitmFwhtSearch:
     """
 
     __slots__ = (
-        "initial_capacity_cols",
-        "max_t_left",
-        "max_n_right",
-        "k",
+        "max_candidates",
         "_impl",
     )
 
     def __init__(
         self,
         *,
-        initial_capacity_cols: int = 1024,
-        max_t_left: int = 20,
-        max_n_right: int = 1 << 16,
-        k: int = 64,
+        max_candidates: int = 64,
     ) -> None:
         config = _NativeMitmFwhtSearchConfig()
-        config.initial_capacity_cols = initial_capacity_cols
-        config.max_t_left = max_t_left
-        config.max_n_right = max_n_right
-        config.k = k
+        config.max_candidates = max_candidates
 
-        self.initial_capacity_cols = initial_capacity_cols
-        self.max_t_left = max_t_left
-        self.max_n_right = max_n_right
-        self.k = k
+        self.max_candidates = max_candidates
         self._impl = _NativeMitmFwhtSearch(config)
 
     def __repr__(self) -> str:
         return (
             "MitmFwhtSearch("
-            f"initial_capacity_cols={self.initial_capacity_cols}, "
-            f"max_t_left={self.max_t_left}, "
-            f"max_n_right={self.max_n_right}, "
-            f"k={self.k})"
+            f"max_candidates={self.max_candidates})"
         )
 
     def name(self) -> str:
@@ -229,21 +201,6 @@ class MitmFwhtSearch:
             Algorithm identifier such as ``"mitm_fwht"``.
         """
         return self._impl.name()
-
-    def describe(self, window_size: int) -> str:
-        """Return a short textual description for a given window size.
-
-        Parameters
-        ----------
-        window_size : int
-            Number of rows in the window that will be searched.
-
-        Returns
-        -------
-        str
-            Human-readable description of the configured strategy.
-        """
-        return self._impl.describe(window_size)
 
     def search(self, window: RowWindow) -> list[Candidate]:
         """Search a row window and return candidate row combinations.
@@ -275,7 +232,7 @@ class MitmFwhtSearch:
         ...     "101011110000",
         ... ])
         >>> window = matrix.row_window([0, 1, 2, 3, 4, 5])
-        >>> candidates = bmm.MitmFwhtSearch(k=8).search(window)
+        >>> candidates = bmm.MitmFwhtSearch(max_candidates=8).search(window)
         >>> len(candidates) > 0
         True
         """

@@ -13,7 +13,7 @@ Examples
 ...     matrix[0, col] = True
 ...     matrix[1, col] = True
 >>> window = matrix.row_window([0, 1])
->>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+>>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
 >>> result = bmm.GreedySelection(min_gain=1).apply(window, candidates)
 >>> result.applied_count >= 1
 True
@@ -25,7 +25,6 @@ from collections.abc import Iterable
 
 from ._bmmpy import (
     ApplyResult,
-    BitMatrix,
     Candidate,
     RowWindow,
     GreedySelection as _NativeGreedySelection,
@@ -67,7 +66,7 @@ class GreedySelection:
     ...     matrix[0, col] = True
     ...     matrix[1, col] = True
     >>> window = matrix.row_window([0, 1])
-    >>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+    >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
     >>> selector = bmm.GreedySelection(min_gain=1)
     >>> result = selector.apply(window, candidates)
     >>> result.applied_count >= 1
@@ -122,7 +121,7 @@ class GreedySelection:
         ...     matrix[0, col] = True
         ...     matrix[1, col] = True
         >>> window = matrix.row_window([0, 1])
-        >>> candidates = bmm.FwhtSearch(max_rows=16, k=1).search(window)
+        >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
         >>> result = bmm.GreedySelection(min_gain=1).apply(window, candidates)
         >>> result.weight_improvement > 0
         True

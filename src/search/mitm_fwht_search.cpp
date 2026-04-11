@@ -46,9 +46,9 @@ std::uint32_t unpack_right_mask(std::int64_t data) noexcept {
 } // namespace
 
 MitmFwhtSearch::MitmFwhtSearch(MitmFwhtSearchConfig config) : _config(config) {
-    const std::size_t initial_cols = std::max<std::size_t>(_config.initial_capacity_cols, 1);
-    const std::size_t max_t_left = std::max<std::size_t>(_config.max_t_left, 1);
-    const std::size_t max_n_right = std::max<std::size_t>(_config.max_n_right, 1);
+    const std::size_t initial_cols = std::max<std::size_t>(_config.reserve_unique_patterns, 1);
+    const std::size_t max_t_left = std::max<std::size_t>(_config.reserve_left_rows, 1);
+    const std::size_t max_n_right = std::max<std::size_t>(_config.reserve_right_states, 1);
 
     _col_data.resize(initial_cols, 0);
     _left_masks.resize(initial_cols, 0);
@@ -61,7 +61,7 @@ MitmFwhtSearch::MitmFwhtSearch(MitmFwhtSearchConfig config) : _config(config) {
     _fwht_buffer.resize(max_n_right, 0);
 
     _col_map.reserve(initial_cols);
-    _candidates.reserve(_config.k);
+    _candidates.reserve(_config.max_candidates);
 }
 
 std::pair<std::size_t, std::size_t> MitmFwhtSearch::get_split_info(std::size_t t) noexcept {
@@ -78,10 +78,10 @@ void MitmFwhtSearch::ensure_capacity(std::size_t cols, std::size_t t_left, std::
         _col_map.reserve(new_len);
     }
 
-    if (t_left > _config.max_t_left) {
-        _config.max_t_left = t_left + 4;
-        _adj_offsets.resize(_config.max_t_left + 1, 0);
-        _adj_counts.resize(_config.max_t_left, 0);
+    if (t_left > _config.reserve_left_rows) {
+        _config.reserve_left_rows = t_left + 4;
+        _adj_offsets.resize(_config.reserve_left_rows + 1, 0);
+        _adj_counts.resize(_config.reserve_left_rows, 0);
     }
 
     if (t_left != 0 && cols > std::numeric_limits<std::size_t>::max() / t_left) {
@@ -93,7 +93,7 @@ void MitmFwhtSearch::ensure_capacity(std::size_t cols, std::size_t t_left, std::
         _adj_indices.resize(required_indices + 4096, 0);
 
     if (n_right > _buckets.size()) {
-        _config.max_n_right = n_right;
+        _config.reserve_right_states = n_right;
         _buckets.resize(n_right, 0);
         _fwht_buffer.resize(n_right, 0);
     }
@@ -266,7 +266,7 @@ void MitmFwhtSearch::add_result(std::uint64_t mask,
                                 std::int32_t total_weight,
                                 std::int32_t& min_score_threshold,
                                 std::uint32_t& worst_weight) {
-    const std::size_t k = _config.k;
+    const std::size_t k = _config.max_candidates;
 
     const Candidate incoming = Candidate::from_u64(mask, weight);
 
@@ -343,7 +343,7 @@ void MitmFwhtSearch::process_candidate(std::uint32_t x_left,
 std::vector<Candidate> MitmFwhtSearch::search(const RowWindow& window) {
     _candidates.clear();
 
-    if (_config.k == 0)
+    if (_config.max_candidates == 0)
         return {};
 
     const std::size_t t = window.size();
@@ -395,7 +395,7 @@ std::vector<Candidate> MitmFwhtSearch::search(const RowWindow& window) {
             current_x_left, n_right, t_left, total_weight, min_score_threshold, worst_weight);
     }
 
-    if (_candidates.size() < _config.k) {
+    if (_candidates.size() < _config.max_candidates) {
         std::sort(_candidates.begin(), _candidates.end(), candidate_less);
     }
 
