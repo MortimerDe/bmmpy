@@ -49,6 +49,9 @@ target_sources(
         src/search/mitm_fwht_search.cpp
 
         src/fwht16/engine.cpp
+        src/fwht16/gpu_executor.cpp
+        src/fwht16/cpu_executor.cpp
+
 )
 
 target_include_directories(
