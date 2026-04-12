@@ -5,6 +5,6 @@
 namespace bmmpy {
 class CpuFwht16Executor {
 public:
-    Fwht16BatchResponse run(const Fwht16BatchRequest& request);
+    Fwht16BatchResponse run(const Fwht16BatchRequest& request) const;
 };
 } // namespace bmmpy

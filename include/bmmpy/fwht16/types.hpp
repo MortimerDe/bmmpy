@@ -41,8 +41,8 @@ struct Fwht16BatchResponse {
     std::vector<std::size_t> topk_offsets;
 
     // flattened dense spectrum.
-    // spektrum for sample i occupies:
+    // spectra for sample i occupies:
     // [i * k_spectrum_size, (i + 1) * k_spectrum_size)]
-    std::vector<std::int16_t> spectrum_results;
+    std::vector<std::int16_t> spectra;
 };
 } // namespace bmmpy
