@@ -47,6 +47,8 @@ target_sources(
 
         src/search/fwht_search.cpp
         src/search/mitm_fwht_search.cpp
+
+        src/fwht16/engine.cpp
 )
 
 target_include_directories(
