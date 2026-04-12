@@ -2,7 +2,7 @@
 
 #include "bmmpy/fwht16/types.hpp"
 
-namespace bmmp::fwht16 {
+namespace bmmpy::fwht16 {
 
 class GpuFwht16Executor {
 public:
@@ -10,4 +10,4 @@ public:
     Fwht16BatchResponse run(const Fwht16BatchRequest& request) const;
 };
 
-} // namespace bmmp::fwht16
+} // namespace bmmpy::fwht16

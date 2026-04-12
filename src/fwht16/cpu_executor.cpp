@@ -1,6 +1,6 @@
 #include "bmmpy/fwht16/cpu_executor.hpp"
 
-namespace bmmp::fwht16 {
+namespace bmmpy::fwht16 {
 
 Fwht16BatchResponse CpuFwht16Executor::run(const Fwht16BatchRequest& request) const {
     Fwht16BatchResponse response;
@@ -17,4 +17,4 @@ Fwht16BatchResponse CpuFwht16Executor::run(const Fwht16BatchRequest& request) co
     return response;
 }
 
-} // namespace bmmp::fwht16
+} // namespace bmmpy::fwht16

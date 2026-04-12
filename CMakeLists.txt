@@ -168,4 +168,8 @@ if(BUILD_TESTING)
     add_executable(math_tests tests/math_tests.cpp)
     target_link_libraries(math_tests PRIVATE bmmpy_core)
     add_test(NAME math_tests COMMAND math_tests)
+
+    add_executable(fwht16_tests tests/fwht16_tests.cpp)
+    target_link_libraries(fwht16_tests PRIVATE bmmpy_core)
+    add_test(NAME fwht16_tests COMMAND fwht16_tests)
 endif()

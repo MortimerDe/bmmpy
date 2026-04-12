@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-namespace bmmp::fwht16 {
+namespace bmmpy::fwht16 {
 namespace {
 void validate_request(const Fwht16BatchRequest& request) {
     if (request.batch_size != 0 && request.samples == nullptr) {
@@ -17,7 +17,7 @@ void validate_request(const Fwht16BatchRequest& request) {
         throw std::invalid_argument("Fwht16Engine: topk must be non-zero in topk mode");
     }
 }
-}; // namespace
+} // namespace
 
 Fwht16BatchResponse Fwht16Engine::run(const Fwht16BatchRequest& request) const {
     validate_request(request);
@@ -39,4 +39,4 @@ Fwht16BatchResponse Fwht16Engine::run(const Fwht16BatchRequest& request) const {
     }
     throw std::invalid_argument("Fwht16Engine: unknown backend specified");
 }
-} // namespace bmmp::fwht16
+} // namespace bmmpy::fwht16
