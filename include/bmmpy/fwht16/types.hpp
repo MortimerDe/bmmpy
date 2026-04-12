@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace bmmpy {
+namespace bmmp::fwht16 {
 struct ColumnMasks16 {
     std::array<std::uint16_t, Fwht16Constants::k_cols> masks{};
 };
@@ -45,4 +45,4 @@ struct Fwht16BatchResponse {
     // [i * k_spectrum_size, (i + 1) * k_spectrum_size)]
     std::vector<std::int16_t> spectra;
 };
-} // namespace bmmpy
+} // namespace bmmp::fwht16

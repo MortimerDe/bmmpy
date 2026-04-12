@@ -2,10 +2,10 @@
 
 #include <stdexcept>
 
-namespace bmmpy {
+namespace bmmp::fwht16 {
 bool GpuFwht16Executor::available() noexcept { return false; }
 
 Fwht16BatchResponse GpuFwht16Executor::run(const Fwht16BatchRequest&) const {
     throw std::runtime_error("GpuFwht16Executor: GPU backend is not implemented");
 };
-} // namespace bmmpy
+} // namespace bmmp::fwht16

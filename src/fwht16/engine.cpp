@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-namespace bmmpy {
+namespace bmmp::fwht16 {
 namespace {
 void validate_request(const Fwht16BatchRequest& request) {
     if (request.batch_size != 0 && request.samples == nullptr) {
@@ -39,4 +39,4 @@ Fwht16BatchResponse Fwht16Engine::run(const Fwht16BatchRequest& request) const {
     }
     throw std::invalid_argument("Fwht16Engine: unknown backend specified");
 }
-} // namespace bmmpy
+} // namespace bmmp::fwht16
