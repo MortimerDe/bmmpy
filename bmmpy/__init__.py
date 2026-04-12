@@ -21,7 +21,7 @@ Examples
 >>> window = matrix.row_window([0, 1])
 >>> result = bmm.search_apply(
 ...     window,
-...     searcher=bmm.FwhtSearch(max_rows=16, k=1),
+...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
 ...     selector=bmm.GreedySelection(min_gain=1),
 ... )
 >>> result.applied_count >= 1
