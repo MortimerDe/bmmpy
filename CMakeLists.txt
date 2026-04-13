@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(CTest)
-
+option(BMMPY_BUILD_BENCHMARKS "Build benchmark targets" OFF)
 
 # Project version
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENT)
@@ -55,8 +55,6 @@ target_sources(
         src/fwht16/cpu_kernel_scalar.cpp
         # src/fwht16/cpu_kernel_avx2.cpp
         src/fwht16/cpu_dispatch.cpp
-
-
 )
 
 target_include_directories(
@@ -167,6 +165,23 @@ install(
 add_executable(cli src/cli.cpp)
 target_link_libraries(cli PRIVATE bmmpy_core)
 
+# Benchmarks
+if(BMMPY_BUILD_BENCHMARKS)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_DOWNLOAD_DEPENDENCIES OFF CACHE BOOL "" FORCE)
+
+    add_subdirectory(extern/benchmark EXCLUDE_FROM_ALL)
+
+    add_executable(fwht16_bench bench/fwht16_bench.cpp)
+    target_link_libraries(
+        fwht16_bench
+        PRIVATE
+            bmmpy_core
+            benchmark::benchmark
+            benchmark::benchmark_main
+    )
+endif()
 
 # Tests
 if(BUILD_TESTING)
