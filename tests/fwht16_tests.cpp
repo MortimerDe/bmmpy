@@ -4,6 +4,7 @@
 #include "bmmpy/math/fwht.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -34,6 +35,12 @@ bmmpy::fwht16::ColumnMasks16 make_sample(std::uint32_t seed) {
         sample.masks[i] =
             static_cast<std::uint16_t>((seed + i * 73u + (i % 11u) * 4099u) & 0xFFFFu);
     }
+    return sample;
+}
+
+bmmpy::fwht16::ColumnMasks16 make_repeated_sample(std::uint16_t mask) {
+    bmmpy::fwht16::ColumnMasks16 sample{};
+    sample.masks.fill(mask);
     return sample;
 }
 
@@ -88,35 +95,7 @@ void test_constants_are_stable() {
     require(bmmpy::fwht16::Fwht16Constants::k_max_weight == 512, "k_max_weight");
 }
 
-void test_cpu_scalar_stub_returns_fixed_topk_layout() {
-    bmmpy::fwht16::ColumnMasks16 sample{};
-    bmmpy::fwht16::Fwht16Engine engine;
-
-    bmmpy::fwht16::Fwht16BatchRequest request;
-    request.samples = &sample;
-    request.batch_size = 1;
-    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
-    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
-    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
-    request.topk = 8;
-
-    const auto response = engine.run(request);
-
-    require(response.actual_backend == bmmpy::fwht16::Fwht16Backend::cpu, "actual_backend");
-    require(response.actual_cpu_backend == bmmpy::fwht16::Fwht16CpuBackend::scalar,
-            "actual_cpu_backend");
-    require(response.mode == bmmpy::fwht16::Fwht16ResultMode::topk, "mode");
-    require(response.batch_size == 1, "batch_size");
-    require(response.topk_results.size() == 8, "topk_results size");
-    require(response.spectra.empty(), "spectra empty");
-
-    for (const auto& item : response.topk_results) {
-        require(item.mask == 0, "topk mask zero initialized");
-        require(item.weight == 0, "topk weight zero initialized");
-    }
-}
-
-void test_cpu_auto_stub_defaults_to_scalar() {
+void test_cpu_auto_defaults_to_scalar() {
     bmmpy::fwht16::ColumnMasks16 sample{};
     bmmpy::fwht16::Fwht16Engine engine;
 
@@ -134,33 +113,6 @@ void test_cpu_auto_stub_defaults_to_scalar() {
     require(response.actual_cpu_backend == bmmpy::fwht16::Fwht16CpuBackend::scalar,
             "auto actual_cpu_backend");
     require(response.topk_results.size() == 4, "auto topk_results size");
-}
-
-void test_cpu_stub_returns_zeroed_spectrum_layout() {
-    bmmpy::fwht16::ColumnMasks16 samples[2]{};
-    bmmpy::fwht16::Fwht16Engine engine;
-
-    bmmpy::fwht16::Fwht16BatchRequest request;
-    request.samples = samples;
-    request.batch_size = 2;
-    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
-    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
-    request.mode = bmmpy::fwht16::Fwht16ResultMode::spectrum;
-
-    const auto response = engine.run(request);
-
-    require(response.actual_backend == bmmpy::fwht16::Fwht16Backend::cpu,
-            "spectrum actual_backend");
-    require(response.actual_cpu_backend == bmmpy::fwht16::Fwht16CpuBackend::scalar,
-            "spectrum actual_cpu_backend");
-    require(response.mode == bmmpy::fwht16::Fwht16ResultMode::spectrum, "spectrum mode");
-    require(response.batch_size == 2, "spectrum batch_size");
-    require(response.topk_results.empty(), "spectrum topk_results empty");
-    require(response.spectra.size() == 2 * bmmpy::fwht16::Fwht16Constants::k_spectrum_size,
-            "spectra size");
-
-    for (std::int16_t value : response.spectra)
-        require(value == 0, "spectra zero initialized");
 }
 
 void test_engine_rejects_null_samples_for_nonzero_batch() {
@@ -182,6 +134,18 @@ void test_engine_rejects_zero_topk_in_topk_mode() {
     request.topk = 0;
 
     expect_throw<std::invalid_argument>([&] { (void)engine.run(request); }, "zero topk");
+}
+
+void test_engine_rejects_topk_too_large() {
+    bmmpy::fwht16::ColumnMasks16 sample{};
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = bmmpy::fwht16::Fwht16Constants::k_spectrum_size;
+
+    expect_throw<std::invalid_argument>([&] { (void)engine.run(request); }, "topk too large");
 }
 
 void test_engine_cpu_route_uses_cpu_backend() {
@@ -249,18 +213,6 @@ void test_cpu_avx512_route_throws_when_unimplemented() {
     expect_throw<std::runtime_error>([&] { (void)engine.run(request); }, "avx512 unavailable");
 }
 
-void test_engine_rejects_topk_too_large() {
-    bmmpy::fwht16::ColumnMasks16 sample{};
-    bmmpy::fwht16::Fwht16Engine engine;
-    bmmpy::fwht16::Fwht16BatchRequest request;
-    request.samples = &sample;
-    request.batch_size = 1;
-    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
-    request.topk = bmmpy::fwht16::Fwht16Constants::k_spectrum_size;
-
-    expect_throw<std::invalid_argument>([&] { (void)engine.run(request); }, "topk too large");
-}
-
 void test_cpu_scalar_spectrum_matches_reference_fwht() {
     const auto sample = make_sample(17u);
 
@@ -278,6 +230,31 @@ void test_cpu_scalar_spectrum_matches_reference_fwht() {
     require(response.spectra.size() == expected.size(), "spectrum size");
     for (std::size_t i = 0; i < expected.size(); ++i)
         require(response.spectra[i] == expected[i], "spectrum value");
+}
+
+void test_cpu_scalar_batched_spectrum_matches_reference_fwht() {
+    const bmmpy::fwht16::ColumnMasks16 samples[2] = {
+        make_sample(5u),
+        make_sample(123u),
+    };
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = samples;
+    request.batch_size = 2;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::spectrum;
+
+    const auto response = engine.run(request);
+
+    for (std::size_t sample_index = 0; sample_index < 2; ++sample_index) {
+        const auto expected = make_reference_spectrum(samples[sample_index]);
+        const std::size_t base = sample_index * bmmpy::fwht16::Fwht16Constants::k_spectrum_size;
+
+        for (std::size_t i = 0; i < expected.size(); ++i)
+            require(response.spectra[base + i] == expected[i], "batched spectrum value");
+    }
 }
 
 void test_cpu_scalar_topk_for_zero_sample() {
@@ -324,6 +301,123 @@ void test_cpu_scalar_spectrum_for_zero_sample() {
     }
 }
 
+void test_cpu_scalar_topk_matches_reference_scan_general() {
+    const auto sample = make_sample(91u);
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = 16;
+
+    const auto response = engine.run(request);
+    const auto expected = make_reference_topk(make_reference_spectrum(sample), request.topk);
+
+    require(response.topk_results.size() == expected.size(), "general topk size");
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        require(response.topk_results[i].mask == expected[i].mask, "general topk mask");
+        require(response.topk_results[i].weight == expected[i].weight, "general topk weight");
+    }
+}
+
+void test_cpu_scalar_batched_topk_matches_reference_scan() {
+    const bmmpy::fwht16::ColumnMasks16 samples[2] = {
+        make_sample(5u),
+        make_sample(123u),
+    };
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = samples;
+    request.batch_size = 2;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = 8;
+
+    const auto response = engine.run(request);
+
+    require(response.topk_results.size() == 2 * request.topk, "batched topk size");
+
+    for (std::size_t sample_index = 0; sample_index < 2; ++sample_index) {
+        const auto expected =
+            make_reference_topk(make_reference_spectrum(samples[sample_index]), request.topk);
+        const std::size_t base = sample_index * request.topk;
+
+        for (std::size_t i = 0; i < request.topk; ++i) {
+            require(response.topk_results[base + i].mask == expected[i].mask, "batched topk mask");
+            require(response.topk_results[base + i].weight == expected[i].weight,
+                    "batched topk weight");
+        }
+    }
+}
+
+void test_cpu_scalar_topk_one_matches_reference() {
+    const auto sample = make_sample(777u);
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = 1;
+
+    const auto response = engine.run(request);
+    const auto expected = make_reference_topk(make_reference_spectrum(sample), 1);
+
+    require(response.topk_results.size() == 1, "topk=1 size");
+    require(response.topk_results[0].mask == expected[0].mask, "topk=1 mask");
+    require(response.topk_results[0].weight == expected[0].weight, "topk=1 weight");
+}
+
+void test_cpu_scalar_repeated_mask_best_has_zero_weight() {
+    const auto sample = make_repeated_sample(0x1234u);
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = 4;
+
+    const auto response = engine.run(request);
+    const auto expected = make_reference_topk(make_reference_spectrum(sample), request.topk);
+
+    require(response.topk_results.size() == request.topk, "repeated-mask topk size");
+    require(response.topk_results[0].weight == 0, "repeated-mask best weight");
+
+    for (std::size_t i = 0; i < request.topk; ++i) {
+        require(response.topk_results[i].mask == expected[i].mask, "repeated-mask topk mask");
+        require(response.topk_results[i].weight == expected[i].weight, "repeated-mask topk weight");
+    }
+}
+
+void test_cpu_scalar_repeated_mask_spectrum_matches_reference() {
+    const auto sample = make_repeated_sample(0x00A5u);
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::spectrum;
+
+    const auto response = engine.run(request);
+    const auto expected = make_reference_spectrum(sample);
+
+    require(response.spectra.size() == expected.size(), "repeated-mask spectrum size");
+    for (std::size_t i = 0; i < expected.size(); ++i)
+        require(response.spectra[i] == expected[i], "repeated-mask spectrum value");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -334,7 +428,7 @@ struct TestCase {
 int main() {
     const TestCase tests[] = {
         {"constants_are_stable", &test_constants_are_stable},
-        {"cpu_auto_stub_defaults_to_scalar", &test_cpu_auto_stub_defaults_to_scalar},
+        {"cpu_auto_defaults_to_scalar", &test_cpu_auto_defaults_to_scalar},
         {"engine_rejects_null_samples_for_nonzero_batch",
          &test_engine_rejects_null_samples_for_nonzero_batch},
         {"engine_rejects_zero_topk_in_topk_mode", &test_engine_rejects_zero_topk_in_topk_mode},
@@ -350,8 +444,19 @@ int main() {
         {"engine_rejects_topk_too_large", &test_engine_rejects_topk_too_large},
         {"cpu_scalar_spectrum_matches_reference_fwht",
          &test_cpu_scalar_spectrum_matches_reference_fwht},
+        {"cpu_scalar_batched_spectrum_matches_reference_fwht",
+         &test_cpu_scalar_batched_spectrum_matches_reference_fwht},
         {"cpu_scalar_topk_for_zero_sample", &test_cpu_scalar_topk_for_zero_sample},
         {"cpu_scalar_spectrum_for_zero_sample", &test_cpu_scalar_spectrum_for_zero_sample},
+        {"cpu_scalar_topk_matches_reference_scan_general",
+         &test_cpu_scalar_topk_matches_reference_scan_general},
+        {"cpu_scalar_batched_topk_matches_reference_scan",
+         &test_cpu_scalar_batched_topk_matches_reference_scan},
+        {"cpu_scalar_topk_one_matches_reference", &test_cpu_scalar_topk_one_matches_reference},
+        {"cpu_scalar_repeated_mask_best_has_zero_weight",
+         &test_cpu_scalar_repeated_mask_best_has_zero_weight},
+        {"cpu_scalar_repeated_mask_spectrum_matches_reference",
+         &test_cpu_scalar_repeated_mask_spectrum_matches_reference},
     };
 
     for (const TestCase& test : tests) {
