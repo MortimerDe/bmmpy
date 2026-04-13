@@ -6,6 +6,9 @@
 #include <cstdint>
 
 namespace bmmpy::fwht16 {
+
+using Fwht16KernelFn = void (*)(std::int16_t* data) noexcept;
+
 void build_histogram_16(const ColumnMasks16& sample, std::int16_t* histogram) noexcept;
 
 void fwht16_scalar(std::int16_t* data) noexcept;

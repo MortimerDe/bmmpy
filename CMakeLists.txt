@@ -53,6 +53,8 @@ target_sources(
         src/fwht16/gpu_executor.cpp
         src/fwht16/cpu_executor.cpp
         src/fwht16/cpu_kernel_scalar.cpp
+        src/fwht16/cpu_dispatch.cpp
+
 
 )
 
