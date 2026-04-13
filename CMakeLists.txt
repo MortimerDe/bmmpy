@@ -48,9 +48,11 @@ target_sources(
         src/search/fwht_search.cpp
         src/search/mitm_fwht_search.cpp
 
+        # fwht16
         src/fwht16/engine.cpp
         src/fwht16/gpu_executor.cpp
         src/fwht16/cpu_executor.cpp
+        src/fwht16/cpu_kernel_scalar.cpp
 
 )
 

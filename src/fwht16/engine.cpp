@@ -17,6 +17,11 @@ void validate_request(const Fwht16BatchRequest& request) {
     if (request.mode == Fwht16ResultMode::topk && request.topk == 0) {
         throw std::invalid_argument("Fwht16Engine: topk must be non-zero in topk mode");
     }
+
+    if (request.mode == Fwht16ResultMode::topk &&
+        request.topk >= Fwht16Constants::k_spectrum_size) {
+        throw std::invalid_argument("Fwht16Engine: topk must be <= 65535 in topk mode");
+    }
 }
 
 } // namespace
