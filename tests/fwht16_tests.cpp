@@ -1,4 +1,5 @@
 #include "bmmpy/fwht16/constants.hpp"
+#include "bmmpy/fwht16/cpu_dispatch.hpp"
 #include "bmmpy/fwht16/engine.hpp"
 #include "bmmpy/fwht16/types.hpp"
 #include "bmmpy/math/fwht.hpp"
@@ -27,6 +28,20 @@ bool topk_item_less(const bmmpy::fwht16::Fwht16TopKItem& lhs,
         return lhs.weight < rhs.weight;
 
     return lhs.mask < rhs.mask;
+}
+
+bmmpy::fwht16::Fwht16CpuBackend expected_auto_cpu_backend() {
+    return bmmpy::fwht16::resolve_cpu_dispatch(bmmpy::fwht16::Fwht16CpuBackend::auto_select)
+        .backend;
+}
+
+bool avx2_available() noexcept {
+    try {
+        return bmmpy::fwht16::resolve_cpu_dispatch(bmmpy::fwht16::Fwht16CpuBackend::avx2).backend ==
+               bmmpy::fwht16::Fwht16CpuBackend::avx2;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 bmmpy::fwht16::ColumnMasks16 make_sample(std::uint32_t seed) {
@@ -95,7 +110,7 @@ void test_constants_are_stable() {
     require(bmmpy::fwht16::Fwht16Constants::k_max_weight == 512, "k_max_weight");
 }
 
-void test_cpu_auto_defaults_to_scalar() {
+void test_cpu_auto_select_uses_best_available_backend() {
     bmmpy::fwht16::ColumnMasks16 sample{};
     bmmpy::fwht16::Fwht16Engine engine;
 
@@ -110,8 +125,7 @@ void test_cpu_auto_defaults_to_scalar() {
     const auto response = engine.run(request);
 
     require(response.actual_backend == bmmpy::fwht16::Fwht16Backend::cpu, "auto actual_backend");
-    require(response.actual_cpu_backend == bmmpy::fwht16::Fwht16CpuBackend::scalar,
-            "auto actual_cpu_backend");
+    require(response.actual_cpu_backend == expected_auto_cpu_backend(), "auto actual_cpu_backend");
     require(response.topk_results.size() == 4, "auto topk_results size");
 }
 
@@ -163,7 +177,7 @@ void test_engine_cpu_route_uses_cpu_backend() {
             "cpu route backend");
 }
 
-void test_engine_auto_route_falls_back_to_cpu_scalar() {
+void test_engine_auto_route_uses_best_available_cpu_backend() {
     bmmpy::fwht16::ColumnMasks16 sample{};
     bmmpy::fwht16::Fwht16Engine engine;
     bmmpy::fwht16::Fwht16BatchRequest request;
@@ -174,8 +188,7 @@ void test_engine_auto_route_falls_back_to_cpu_scalar() {
 
     const auto response = engine.run(request);
     require(response.actual_backend == bmmpy::fwht16::Fwht16Backend::cpu, "auto route");
-    require(response.actual_cpu_backend == bmmpy::fwht16::Fwht16CpuBackend::scalar,
-            "auto cpu route");
+    require(response.actual_cpu_backend == expected_auto_cpu_backend(), "auto cpu route");
 }
 
 void test_engine_gpu_route_throws_when_unavailable() {
@@ -189,7 +202,7 @@ void test_engine_gpu_route_throws_when_unavailable() {
     expect_throw<std::runtime_error>([&] { (void)engine.run(request); }, "gpu unavailable");
 }
 
-void test_cpu_avx2_route_throws_when_unimplemented() {
+void test_cpu_avx2_route_matches_availability() {
     bmmpy::fwht16::ColumnMasks16 sample{};
     bmmpy::fwht16::Fwht16Engine engine;
     bmmpy::fwht16::Fwht16BatchRequest request;
@@ -197,6 +210,18 @@ void test_cpu_avx2_route_throws_when_unimplemented() {
     request.batch_size = 1;
     request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
     request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::avx2;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = 4;
+
+    if (avx2_available()) {
+        const auto response = engine.run(request);
+        require(response.actual_backend == bmmpy::fwht16::Fwht16Backend::cpu,
+                "avx2 actual_backend");
+        require(response.actual_cpu_backend == bmmpy::fwht16::Fwht16CpuBackend::avx2,
+                "avx2 actual_cpu_backend");
+        require(response.topk_results.size() == 4, "avx2 topk size");
+        return;
+    }
 
     expect_throw<std::runtime_error>([&] { (void)engine.run(request); }, "avx2 unavailable");
 }
@@ -418,6 +443,72 @@ void test_cpu_scalar_repeated_mask_spectrum_matches_reference() {
         require(response.spectra[i] == expected[i], "repeated-mask spectrum value");
 }
 
+void test_cpu_avx2_spectrum_matches_scalar() {
+    if (!avx2_available())
+        return;
+
+    const bmmpy::fwht16::ColumnMasks16 samples[2] = {
+        make_sample(41u),
+        make_sample(203u),
+    };
+
+    bmmpy::fwht16::Fwht16Engine engine;
+
+    bmmpy::fwht16::Fwht16BatchRequest scalar_request;
+    scalar_request.samples = samples;
+    scalar_request.batch_size = 2;
+    scalar_request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    scalar_request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    scalar_request.mode = bmmpy::fwht16::Fwht16ResultMode::spectrum;
+
+    bmmpy::fwht16::Fwht16BatchRequest avx2_request = scalar_request;
+    avx2_request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::avx2;
+
+    const auto scalar_response = engine.run(scalar_request);
+    const auto avx2_response = engine.run(avx2_request);
+
+    require(scalar_response.spectra.size() == avx2_response.spectra.size(), "avx2 spectrum size");
+    for (std::size_t i = 0; i < scalar_response.spectra.size(); ++i) {
+        require(scalar_response.spectra[i] == avx2_response.spectra[i], "avx2 spectrum value");
+    }
+}
+
+void test_cpu_avx2_topk_matches_scalar() {
+    if (!avx2_available())
+        return;
+
+    const bmmpy::fwht16::ColumnMasks16 samples[2] = {
+        make_sample(7u),
+        make_sample(311u),
+    };
+
+    bmmpy::fwht16::Fwht16Engine engine;
+
+    bmmpy::fwht16::Fwht16BatchRequest scalar_request;
+    scalar_request.samples = samples;
+    scalar_request.batch_size = 2;
+    scalar_request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    scalar_request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    scalar_request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    scalar_request.topk = 16;
+
+    bmmpy::fwht16::Fwht16BatchRequest avx2_request = scalar_request;
+    avx2_request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::avx2;
+
+    const auto scalar_response = engine.run(scalar_request);
+    const auto avx2_response = engine.run(avx2_request);
+
+    require(scalar_response.topk_results.size() == avx2_response.topk_results.size(),
+            "avx2 topk size");
+
+    for (std::size_t i = 0; i < scalar_response.topk_results.size(); ++i) {
+        require(scalar_response.topk_results[i].mask == avx2_response.topk_results[i].mask,
+                "avx2 topk mask");
+        require(scalar_response.topk_results[i].weight == avx2_response.topk_results[i].weight,
+                "avx2 topk weight");
+    }
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -428,17 +519,17 @@ struct TestCase {
 int main() {
     const TestCase tests[] = {
         {"constants_are_stable", &test_constants_are_stable},
-        {"cpu_auto_defaults_to_scalar", &test_cpu_auto_defaults_to_scalar},
+        {"cpu_auto_select_uses_best_available_backend",
+         &test_cpu_auto_select_uses_best_available_backend},
         {"engine_rejects_null_samples_for_nonzero_batch",
          &test_engine_rejects_null_samples_for_nonzero_batch},
         {"engine_rejects_zero_topk_in_topk_mode", &test_engine_rejects_zero_topk_in_topk_mode},
         {"engine_cpu_route_uses_cpu_backend", &test_engine_cpu_route_uses_cpu_backend},
-        {"engine_auto_route_falls_back_to_cpu_scalar",
-         &test_engine_auto_route_falls_back_to_cpu_scalar},
+        {"engine_auto_route_uses_best_available_cpu_backend",
+         &test_engine_auto_route_uses_best_available_cpu_backend},
         {"engine_gpu_route_throws_when_unavailable",
          &test_engine_gpu_route_throws_when_unavailable},
-        {"cpu_avx2_route_throws_when_unimplemented",
-         &test_cpu_avx2_route_throws_when_unimplemented},
+        {"cpu_avx2_route_matches_availability", &test_cpu_avx2_route_matches_availability},
         {"cpu_avx512_route_throws_when_unimplemented",
          &test_cpu_avx512_route_throws_when_unimplemented},
         {"engine_rejects_topk_too_large", &test_engine_rejects_topk_too_large},
@@ -457,6 +548,8 @@ int main() {
          &test_cpu_scalar_repeated_mask_best_has_zero_weight},
         {"cpu_scalar_repeated_mask_spectrum_matches_reference",
          &test_cpu_scalar_repeated_mask_spectrum_matches_reference},
+        {"cpu_avx2_spectrum_matches_scalar", &test_cpu_avx2_spectrum_matches_scalar},
+        {"cpu_avx2_topk_matches_scalar", &test_cpu_avx2_topk_matches_scalar},
     };
 
     for (const TestCase& test : tests) {
