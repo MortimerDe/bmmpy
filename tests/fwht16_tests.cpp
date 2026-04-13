@@ -1,7 +1,9 @@
 #include "bmmpy/fwht16/constants.hpp"
 #include "bmmpy/fwht16/engine.hpp"
 #include "bmmpy/fwht16/types.hpp"
+#include "bmmpy/math/fwht.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -16,6 +18,55 @@ namespace {
 void require(bool condition, std::string_view message) {
     if (!condition)
         fail(std::string(message));
+}
+
+bool topk_item_less(const bmmpy::fwht16::Fwht16TopKItem& lhs,
+                    const bmmpy::fwht16::Fwht16TopKItem& rhs) noexcept {
+    if (lhs.weight != rhs.weight)
+        return lhs.weight < rhs.weight;
+
+    return lhs.mask < rhs.mask;
+}
+
+bmmpy::fwht16::ColumnMasks16 make_sample(std::uint32_t seed) {
+    bmmpy::fwht16::ColumnMasks16 sample{};
+    for (std::size_t i = 0; i < bmmpy::fwht16::Fwht16Constants::k_cols; ++i) {
+        sample.masks[i] =
+            static_cast<std::uint16_t>((seed + i * 73u + (i % 11u) * 4099u) & 0xFFFFu);
+    }
+    return sample;
+}
+
+std::vector<std::int16_t> make_reference_spectrum(const bmmpy::fwht16::ColumnMasks16& sample) {
+    std::vector<std::int16_t> spectrum(bmmpy::fwht16::Fwht16Constants::k_spectrum_size, 0);
+
+    for (std::uint16_t mask : sample.masks)
+        ++spectrum[mask];
+
+    bmmpy::fwht_inplace(spectrum.data(), spectrum.size());
+    return spectrum;
+}
+
+std::vector<bmmpy::fwht16::Fwht16TopKItem>
+make_reference_topk(const std::vector<std::int16_t>& spectrum, std::size_t k) {
+    std::vector<bmmpy::fwht16::Fwht16TopKItem> items;
+    items.reserve(bmmpy::fwht16::Fwht16Constants::k_spectrum_size - 1);
+
+    for (std::size_t mask = 1; mask < bmmpy::fwht16::Fwht16Constants::k_spectrum_size; ++mask) {
+        const int w2 = static_cast<int>(bmmpy::fwht16::Fwht16Constants::k_max_weight) -
+                       static_cast<int>(spectrum[mask]);
+
+        require(w2 >= 0 && (w2 & 1) == 0, "reference topk weight parity");
+
+        items.push_back({
+            static_cast<std::uint16_t>(mask),
+            static_cast<std::uint16_t>(w2 / 2),
+        });
+    }
+
+    std::sort(items.begin(), items.end(), topk_item_less);
+    items.resize(k);
+    return items;
 }
 
 template <typename Exception, typename Fn> void expect_throw(Fn&& fn, std::string_view context) {
@@ -198,6 +249,81 @@ void test_cpu_avx512_route_throws_when_unimplemented() {
     expect_throw<std::runtime_error>([&] { (void)engine.run(request); }, "avx512 unavailable");
 }
 
+void test_engine_rejects_topk_too_large() {
+    bmmpy::fwht16::ColumnMasks16 sample{};
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = bmmpy::fwht16::Fwht16Constants::k_spectrum_size;
+
+    expect_throw<std::invalid_argument>([&] { (void)engine.run(request); }, "topk too large");
+}
+
+void test_cpu_scalar_spectrum_matches_reference_fwht() {
+    const auto sample = make_sample(17u);
+
+    bmmpy::fwht16::Fwht16Engine engine;
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::spectrum;
+
+    const auto response = engine.run(request);
+    const auto expected = make_reference_spectrum(sample);
+
+    require(response.spectra.size() == expected.size(), "spectrum size");
+    for (std::size_t i = 0; i < expected.size(); ++i)
+        require(response.spectra[i] == expected[i], "spectrum value");
+}
+
+void test_cpu_scalar_topk_for_zero_sample() {
+    bmmpy::fwht16::ColumnMasks16 sample{};
+    bmmpy::fwht16::Fwht16Engine engine;
+
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = &sample;
+    request.batch_size = 1;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::topk;
+    request.topk = 8;
+
+    const auto response = engine.run(request);
+    const auto expected = make_reference_topk(make_reference_spectrum(sample), request.topk);
+
+    require(response.topk_results.size() == expected.size(), "topk_results size");
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        require(response.topk_results[i].mask == expected[i].mask, "topk mask");
+        require(response.topk_results[i].weight == expected[i].weight, "topk weight");
+    }
+}
+
+void test_cpu_scalar_spectrum_for_zero_sample() {
+    bmmpy::fwht16::ColumnMasks16 samples[2]{};
+    bmmpy::fwht16::Fwht16Engine engine;
+
+    bmmpy::fwht16::Fwht16BatchRequest request;
+    request.samples = samples;
+    request.batch_size = 2;
+    request.backend = bmmpy::fwht16::Fwht16Backend::cpu;
+    request.cpu_backend = bmmpy::fwht16::Fwht16CpuBackend::scalar;
+    request.mode = bmmpy::fwht16::Fwht16ResultMode::spectrum;
+
+    const auto response = engine.run(request);
+
+    for (std::size_t sample_index = 0; sample_index < 2; ++sample_index) {
+        const auto expected = make_reference_spectrum(samples[sample_index]);
+        const std::size_t base = sample_index * bmmpy::fwht16::Fwht16Constants::k_spectrum_size;
+
+        for (std::size_t i = 0; i < expected.size(); ++i)
+            require(response.spectra[base + i] == expected[i], "zero-sample spectrum value");
+    }
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -208,10 +334,7 @@ struct TestCase {
 int main() {
     const TestCase tests[] = {
         {"constants_are_stable", &test_constants_are_stable},
-        {"cpu_scalar_stub_returns_fixed_topk_layout",
-         &test_cpu_scalar_stub_returns_fixed_topk_layout},
         {"cpu_auto_stub_defaults_to_scalar", &test_cpu_auto_stub_defaults_to_scalar},
-        {"cpu_stub_returns_zeroed_spectrum_layout", &test_cpu_stub_returns_zeroed_spectrum_layout},
         {"engine_rejects_null_samples_for_nonzero_batch",
          &test_engine_rejects_null_samples_for_nonzero_batch},
         {"engine_rejects_zero_topk_in_topk_mode", &test_engine_rejects_zero_topk_in_topk_mode},
@@ -224,6 +347,11 @@ int main() {
          &test_cpu_avx2_route_throws_when_unimplemented},
         {"cpu_avx512_route_throws_when_unimplemented",
          &test_cpu_avx512_route_throws_when_unimplemented},
+        {"engine_rejects_topk_too_large", &test_engine_rejects_topk_too_large},
+        {"cpu_scalar_spectrum_matches_reference_fwht",
+         &test_cpu_scalar_spectrum_matches_reference_fwht},
+        {"cpu_scalar_topk_for_zero_sample", &test_cpu_scalar_topk_for_zero_sample},
+        {"cpu_scalar_spectrum_for_zero_sample", &test_cpu_scalar_spectrum_for_zero_sample},
     };
 
     for (const TestCase& test : tests) {
