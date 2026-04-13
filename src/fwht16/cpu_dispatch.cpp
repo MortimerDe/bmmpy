@@ -14,11 +14,24 @@ Fwht16CpuDispatch make_scalar_dispatch() noexcept {
     };
 }
 
+#if defined(BMMPY_HAS_AVX2_BACKEND)
+Fwht16CpuDispatch make_avx2_dispatch() noexcept {
+    return Fwht16CpuDispatch{
+        Fwht16CpuBackend::avx2,
+        &fwht16_avx2,
+    };
+}
+#endif
+
 } // namespace
 
 Fwht16CpuDispatch resolve_cpu_dispatch(Fwht16CpuBackend requested) {
     switch (requested) {
     case Fwht16CpuBackend::auto_select:
+#if defined(BMMPY_HAS_AVX2_BACKEND)
+        if (bmmpy::detail::runtime_supports_avx2())
+            return make_avx2_dispatch();
+#endif
         return make_scalar_dispatch();
 
     case Fwht16CpuBackend::scalar:
@@ -26,10 +39,8 @@ Fwht16CpuDispatch resolve_cpu_dispatch(Fwht16CpuBackend requested) {
 
     case Fwht16CpuBackend::avx2:
 #if defined(BMMPY_HAS_AVX2_BACKEND)
-        if (bmmpy::detail::runtime_supports_avx2()) {
-            throw std::runtime_error(
-                "Fwht16 AVX2 dispatch is wired, but AVX2 kernel is not implemented");
-        }
+        if (bmmpy::detail::runtime_supports_avx2())
+            return make_avx2_dispatch();
 #endif
         throw std::runtime_error("Fwht16 AVX2 backend is not available");
 

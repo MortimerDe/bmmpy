@@ -53,6 +53,7 @@ target_sources(
         src/fwht16/gpu_executor.cpp
         src/fwht16/cpu_executor.cpp
         src/fwht16/cpu_kernel_scalar.cpp
+        # src/fwht16/cpu_kernel_avx2.cpp
         src/fwht16/cpu_dispatch.cpp
 
 
@@ -80,6 +81,7 @@ if(BMMPY_ARCH MATCHES "^(x86_64|amd64|i[3-6]86)$")
         PRIVATE
             src/core/bit_ops_avx2.cpp
             src/math/fwht_avx2.cpp
+            src/fwht16/cpu_kernel_avx2.cpp
     )
 
     target_compile_definitions(
@@ -92,6 +94,8 @@ if(BMMPY_ARCH MATCHES "^(x86_64|amd64|i[3-6]86)$")
         set_source_files_properties(
             src/core/bit_ops_avx2.cpp
             src/math/fwht_avx2.cpp
+            src/fwht16/cpu_kernel_avx2.cpp
+
             PROPERTIES
                 COMPILE_OPTIONS "/arch:AVX2"
         )
@@ -99,6 +103,7 @@ if(BMMPY_ARCH MATCHES "^(x86_64|amd64|i[3-6]86)$")
         set_source_files_properties(
             src/core/bit_ops_avx2.cpp
             src/math/fwht_avx2.cpp
+            src/fwht16/cpu_kernel_avx2.cpp
             PROPERTIES
                 COMPILE_OPTIONS "-mavx2"
         )
