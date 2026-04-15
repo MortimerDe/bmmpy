@@ -31,6 +31,7 @@ True
 """
 from __future__ import annotations
 
+from . import algebra
 from ._bmmpy import (
     ApplyResult,
     MatrixErr,
@@ -46,9 +47,6 @@ from ._bmmpy import (
 )
 from .apply import GreedySelection
 from .candidate import Candidate
-from .generators import (
-    MastrovitoGenerator,
-)
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
 from .search import FwhtSearch, MitmFwhtSearch
 from .workflows import search_apply
@@ -65,6 +63,7 @@ __all__ = [
     "RowWindow",
     "RuntimeFeatures",
     "add",
+    "algebra",
     "fixed_weight_masks_u32",
     "fixed_weight_masks_u64",
     "fwht_i16",
@@ -73,10 +72,6 @@ __all__ = [
     "get_version",
     "matrix_from_rows",
     "search_apply",
-    "MastrovitoGenerator",
-    "build_check_matrix",
-    "get_mastrovito_matrix",
-    "parse_poly",
 ]
 
 __version__ = get_version()

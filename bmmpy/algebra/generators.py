@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TypeAlias
 
-from .matrix import BitMatrix
+from ..matrix import BitMatrix
 
 PolynomialLike: TypeAlias = str | tuple[int, Sequence[int]] | Sequence[int]
 
@@ -91,10 +91,7 @@ class Mastrovito:
         self._m_alpha = _build_element_matrix(degree, powers, elem)
 
     def __repr__(self) -> str:
-        return (
-            "MastrovitoGenerator("
-            f"degree={self.degree}, powers={self.powers}, elem={self.elem})"
-        )
+        return f"Mastrovito(degree={self.degree}, powers={self.powers}, elem={self.elem})"
 
     def get_mastrovito_matrix(self, power: int) -> BitMatrix:
         """Return the degree x degree Mastrovito block for the given power."""
@@ -162,8 +159,8 @@ def build_check_matrix(
     start_i: int = 0,
     elem: int = 2,
 ) -> BitMatrix:
-    """Convenience wrapper for MastrovitoGenerator.build_check_matrix()."""
-    generator = MastrovitoGenerator(poly, elem=elem)
+    """Convenience wrapper for Mastrovito.build_check_matrix()."""
+    generator = Mastrovito(poly, elem=elem)
     return generator.build_check_matrix(c, k, start_i=start_i)
 
 
@@ -173,8 +170,8 @@ def get_mastrovito_matrix(
     *,
     elem: int = 2,
 ) -> BitMatrix:
-    """Convenience wrapper for MastrovitoGenerator.get_mastrovito_matrix()."""
-    generator = MastrovitoGenerator(poly, elem=elem)
+    """Convenience wrapper for Mastrovito.get_mastrovito_matrix()."""
+    generator = Mastrovito(poly, elem=elem)
     return generator.get_mastrovito_matrix(power)
 
 
@@ -348,7 +345,7 @@ def _write_block(matrix: BitMatrix, row_offset: int, col_offset: int, rows: Sequ
 
 
 __all__ = [
-    "MastrovitoGenerator",
+    "Mastrovito",
     "build_check_matrix",
     "get_mastrovito_matrix",
     "parse_poly",
