@@ -92,7 +92,7 @@ class Mastrovito:
 
     def __repr__(self) -> str:
         return (
-            "Mastrovito("
+            "MastrovitoGenerator("
             f"degree={self.degree}, powers={self.powers}, elem={self.elem})"
         )
 
@@ -152,6 +152,30 @@ class Mastrovito:
                 _write_block(matrix, row_offset, col_offset, blocks[power])
 
         return matrix
+
+
+def build_check_matrix(
+    poly: PolynomialLike,
+    c: int,
+    k: int,
+    *,
+    start_i: int = 0,
+    elem: int = 2,
+) -> BitMatrix:
+    """Convenience wrapper for MastrovitoGenerator.build_check_matrix()."""
+    generator = MastrovitoGenerator(poly, elem=elem)
+    return generator.build_check_matrix(c, k, start_i=start_i)
+
+
+def get_mastrovito_matrix(
+    poly: PolynomialLike,
+    power: int,
+    *,
+    elem: int = 2,
+) -> BitMatrix:
+    """Convenience wrapper for MastrovitoGenerator.get_mastrovito_matrix()."""
+    generator = MastrovitoGenerator(poly, elem=elem)
+    return generator.get_mastrovito_matrix(power)
 
 
 def _parse_poly_string(poly: str) -> tuple[int, list[int]]:
@@ -324,7 +348,7 @@ def _write_block(matrix: BitMatrix, row_offset: int, col_offset: int, rows: Sequ
 
 
 __all__ = [
-    "Mastrovito",
+    "MastrovitoGenerator",
     "build_check_matrix",
     "get_mastrovito_matrix",
     "parse_poly",
