@@ -110,6 +110,47 @@ class PublicApiTests(unittest.TestCase):
         self.assertGreater(result.weight_improvement, 0)
         self.assertIn(0, [matrix.row_popcount(0), matrix.row_popcount(1)])
 
+    def test_generators_are_exported(self) -> None:
+        self.assertTrue(hasattr(bmm, "MastrovitoGenerator"))
+        self.assertTrue(hasattr(bmm, "build_check_matrix"))
+        self.assertTrue(hasattr(bmm, "get_mastrovito_matrix"))
+        self.assertTrue(hasattr(bmm, "parse_poly"))
+
+    def test_parse_poly(self) -> None:
+        expected = (8, [8, 5, 3, 1, 0])
+
+        self.assertEqual(bmm.parse_poly("x^8 + x^5 + x^3 + x + 1"), expected)
+        self.assertEqual(bmm.parse_poly([8, 5, 3, 1, 0]), expected)
+        self.assertEqual(bmm.parse_poly((8, [8, 5, 3, 1, 0])), expected)
+
+    def test_mastrovito_generator_block_matrix(self) -> None:
+        generator = bmm.MastrovitoGenerator("x^3 + x + 1")
+
+        self.assertEqual(
+            generator.get_mastrovito_matrix(0).to_rows(),
+            ["100", "010", "001"],
+        )
+        self.assertEqual(
+            generator.get_mastrovito_matrix(1).to_rows(),
+            ["001", "101", "010"],
+        )
+
+    def test_build_check_matrix_baseline(self) -> None:
+        matrix = bmm.build_check_matrix("x^3 + x + 1", c=2, k=1, start_i=1)
+
+        self.assertEqual(matrix.shape, (3, 6))
+        self.assertEqual(
+            matrix.to_rows(),
+            ["100001", "010101", "001010"],
+        )
+
+    def test_generator_object_builds_same_check_matrix(self) -> None:
+        generator = bmm.MastrovitoGenerator([3, 1, 0], elem=2)
+
+        self.assertEqual(
+            generator.build_check_matrix(c=2, k=1, start_i=1).to_rows(),
+            ["100001", "010101", "001010"],
+        )
 
 if __name__ == "__main__":
     unittest.main()
