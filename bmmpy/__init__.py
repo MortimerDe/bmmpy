@@ -46,6 +46,9 @@ from ._bmmpy import (
 )
 from .apply import GreedySelection
 from .candidate import Candidate
+from .generators import (
+    Mastrovito,
+)
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
 from .search import FwhtSearch, MitmFwhtSearch
 from .workflows import search_apply
@@ -70,6 +73,7 @@ __all__ = [
     "get_version",
     "matrix_from_rows",
     "search_apply",
+    "Mastrovito",
 ]
 
 __version__ = get_version()
