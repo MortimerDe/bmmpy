@@ -31,6 +31,7 @@ True
 """
 from __future__ import annotations
 
+from . import algebra
 from ._bmmpy import (
     ApplyResult,
     MatrixErr,
@@ -62,6 +63,7 @@ __all__ = [
     "RowWindow",
     "RuntimeFeatures",
     "add",
+    "algebra",
     "fixed_weight_masks_u32",
     "fixed_weight_masks_u64",
     "fwht_i16",

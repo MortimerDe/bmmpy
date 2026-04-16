@@ -60,3 +60,4 @@ Thumbs.db
 # other
 ___*
 **venv**
+/bench_results
