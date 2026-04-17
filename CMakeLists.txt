@@ -47,6 +47,7 @@ target_sources(
 
         src/search/fwht_search.cpp
         src/search/mitm_fwht_search.cpp
+        src/search/split_window_prep.cpp
 )
 
 target_include_directories(
