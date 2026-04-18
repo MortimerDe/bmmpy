@@ -12,6 +12,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -45,6 +46,25 @@ bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) 
         }
 
         ++row_index;
+    }
+
+    return matrix;
+}
+
+bmmpy::BitMatrix make_cuda_equivalence_matrix(std::size_t rows = 28, std::size_t cols = 96) {
+    bmmpy::BitMatrix matrix(rows, cols);
+
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (std::size_t col = 0; col < cols; ++col) {
+            const std::uint64_t mix =
+                (static_cast<std::uint64_t>(row + 1) * 0x9E3779B185EBCA87ull) ^
+                (static_cast<std::uint64_t>(col + 3) * 0xC2B2AE3D27D4EB4Full) ^
+                (static_cast<std::uint64_t>(row + col + 11) * 0x165667B19E3779F9ull);
+
+            const std::uint64_t folded = mix ^ (mix >> 17) ^ (mix >> 33);
+            if ((folded & 1ull) != 0)
+                matrix.set(row, col, true);
+        }
     }
 
     return matrix;
@@ -388,21 +408,24 @@ void test_cuda_mitm_fwht_rejects_non_int16_safe_total_weight() {
                             "cuda mitm searcher int16-safe total_weight");
 }
 
-void test_cuda_mitm_fwht_reaches_runtime_after_host_prep() {
-    bmmpy::BitMatrix matrix(28, 4);
-    matrix.set(0, 0, true);
-    matrix.set(1, 1, true);
-    matrix.set(2, 2, true);
-    matrix.set(3, 3, true);
+void test_cuda_mitm_fwht_matches_cpu_mitm_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
 
-    bmmpy::CudaMitmFwhtSearch search;
-    const auto window = matrix.row_window({
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13,
-        14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
-    });
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix();
 
-    expect_runtime_error([&] { (void)search.search(window); },
-                         "cuda mitm searcher reaches runtime after prep");
+    std::vector<std::size_t> rows(28);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::MitmFwhtSearch cpu(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 8});
+    bmmpy::CudaMitmFwhtSearch gpu(bmmpy::CudaMitmFwhtSearchConfig{8, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_mitm_fwht matches cpu mitm");
 }
 
 struct TestCase {
@@ -435,8 +458,8 @@ int main() {
         {"cuda_mitm_fwht_validates_low_bits", &test_cuda_mitm_fwht_validates_low_bits},
         {"cuda_mitm_fwht_rejects_non_int16_safe_total_weight",
          &test_cuda_mitm_fwht_rejects_non_int16_safe_total_weight},
-        {"cuda_mitm_fwht_reaches_runtime_after_host_prep",
-         &test_cuda_mitm_fwht_reaches_runtime_after_host_prep},
+        {"cuda_mitm_fwht_matches_cpu_mitm_when_available",
+         &test_cuda_mitm_fwht_matches_cpu_mitm_when_available},
     };
 
     for (const TestCase& test : tests) {
