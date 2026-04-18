@@ -8,6 +8,8 @@ option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # bmmpy_core is linked into the Python extension, so it must be PIC-safe.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -118,6 +120,12 @@ if(BMMPY_ENABLE_CUDA)
 
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
+
+    target_sources(
+        bmmpy_core
+        PRIVATE
+            src/search/cuda_mitm_fwht_launch.cu
+    )
 
     target_link_libraries(bmmpy_core PRIVATE CUDA::cudart)
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_CUDA_BACKEND=1)

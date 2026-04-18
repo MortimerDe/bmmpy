@@ -1,5 +1,6 @@
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 
+#include "bmmpy/search/cuda_mitm_fwht_launch.hpp"
 #include "bmmpy/search/split_window_prep.hpp"
 #include "bmmpy/stub.hpp"
 
@@ -66,7 +67,14 @@ std::vector<Candidate> CudaMitmFwhtSearch::search(const RowWindow& window) {
         throw std::runtime_error("CudaMitmFwhtSearch: no CUDA device is available");
 
     (void)prep;
-    throw std::runtime_error("CudaMitmFwhtSearch: CUDA search path is not implemented yet");
+    const auto device_results = run_cuda_mitm_fwht_search(prep, _config.max_candidates);
+
+    std::vector<Candidate> out;
+    out.reserve(device_results.size());
+    for (const auto& entry : device_results)
+        out.push_back(Candidate::from_u64(entry.mask, entry.weight));
+
+    return out;
 #endif
 }
 
