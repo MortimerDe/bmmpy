@@ -15,7 +15,7 @@ struct CompactSplitWindow { // compact repr of a row window
 
     std::vector<std::uint64_t> q;
     std::vector<std::uint64_t> r;
-    std::vector<std::uint64_t> multiplicity;
+    std::vector<std::int32_t> multiplicity;
 };
 
 CompactSplitWindow build_compact_split_window(const RowWindow& window, std::size_t low_bits);

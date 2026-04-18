@@ -3,6 +3,7 @@
 #include "bmmpy/math/fwht.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/searcher.hpp"
+#include "bmmpy/search/split_window_prep.hpp"
 
 #include <bmmpy/search/mitm_fwht_search.hpp>
 #include <cstdint>
@@ -282,6 +283,31 @@ void test_mitm_fwht_searcher_interface_dispatch() {
     require_same_candidates(actual, expected, "mitm searcher dispatch");
 }
 
+void test_compact_split_window_collects_expected_patterns() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "11001",
+        "00100",
+        "01101",
+        "01001",
+    });
+
+    const auto window = matrix.row_window({0, 1, 2, 3});
+    const auto compact = bmmpy::build_compact_split_window(window, 2);
+
+    require(compact.t == 4, "compact_split_window t");
+    require(compact.low_bits == 2, "compact_split_window low_bits");
+    require(compact.high_bits == 2, "compact_split_window high_bits");
+    require(compact.total_weight == 4, "compact_split_window total_weight");
+
+    require_eq<std::uint64_t>(compact.q,
+                              {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{3}},
+                              "compact_split_window q");
+    require_eq<std::uint64_t>(compact.r,
+                              {std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{1}},
+                              "compact_split_window r");
+    require_eq<std::int32_t>(compact.multiplicity, {1, 1, 2}, "compact_split_window multiplicity");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -297,6 +323,8 @@ int main() {
         {"fwht_i16_wrap", &test_fwht_i16_wrap},
         {"calc_scores_and_order_i32", &test_calc_scores_and_order_i32},
         {"calc_scores_and_order_i16", &test_calc_scores_and_order_i16},
+        {"compact_split_window_collects_expected_patterns",
+         &test_compact_split_window_collects_expected_patterns},
         {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
         {"fwht_search_respects_k", &test_fwht_search_respects_k},
         {"fwht_search_window_bounds", &test_fwht_search_window_bounds},
