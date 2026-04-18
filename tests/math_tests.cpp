@@ -1,9 +1,11 @@
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
+#include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/searcher.hpp"
 #include "bmmpy/search/split_window_prep.hpp"
+#include "bmmpy/stub.hpp"
 
 #include <bmmpy/search/mitm_fwht_search.hpp>
 #include <cstdint>
@@ -83,6 +85,18 @@ template <typename Fn> void expect_out_of_range(Fn&& fn, std::string_view contex
     }
 
     fail(std::string(context) + ": expected std::out_of_range");
+}
+
+template <typename Fn> void expect_invalid_argument(Fn&& fn, std::string_view context) {
+    try {
+        fn();
+    } catch (const std::invalid_argument&) {
+        return;
+    } catch (const std::exception& ex) {
+        fail(std::string(context) + ": expected std::invalid_argument, got: " + ex.what());
+    }
+
+    fail(std::string(context) + ": expected std::invalid_argument");
 }
 
 void test_fixed_weight_masks_u32() {
@@ -306,6 +320,32 @@ void test_compact_split_window_collects_expected_patterns() {
                               {std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{1}},
                               "compact_split_window r");
     require_eq<std::int32_t>(compact.multiplicity, {1, 1, 2}, "compact_split_window multiplicity");
+}
+
+void test_cuda_runtime_features_are_consistent() {
+    const auto features = bmmpy::get_runtime_features();
+    require(!(features.cuda_available && !features.cuda_compiled),
+            "cuda_available implies cuda_compiled");
+}
+
+void test_cuda_mitm_fwht_searcher_interface_dispatch() {
+    std::unique_ptr<bmmpy::Searcher> searcher =
+        std::make_unique<bmmpy::CudaMitmFwhtSearch>(bmmpy::CudaMitmFwhtSearchConfig{});
+
+    require(std::string_view(searcher->name()) == "cuda_mitm_fwht", "cuda mitm searcher name");
+}
+
+void test_cuda_mitm_fwht_validates_window_size() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "10101",
+        "11100",
+        "00111",
+    });
+
+    bmmpy::CudaMitmFwhtSearch search;
+    const auto window = matrix.row_window({0, 1, 2});
+
+    expect_invalid_argument([&] { (void)search.search(window); }, "cuda mitm searcher window size");
 }
 
 struct TestCase {

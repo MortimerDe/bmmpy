@@ -2,6 +2,10 @@
 
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
 
+#if defined(BMMPY_HAS_CUDA_BACKEND)
+#include <cuda_runtime_api.h>
+#endif
+
 #if defined(BMMPY_HAS_OPENMP)
 #include <omp.h>
 #endif
@@ -19,12 +23,19 @@ RuntimeFeatures get_runtime_features() {
 
     out.avx2_available = detail::runtime_supports_avx2();
 
+#if defined(BMMPY_HAS_CUDA_BACKEND)
+    out.cuda_compiled = true;
+
+    int device_count = 0;
+    const cudaError_t cuda_status = cudaGetDeviceCount(&device_count);
+    out.cuda_available = (cuda_status == cudaSuccess && device_count > 0);
+#endif
+
 #if defined(BMMPY_HAS_OPENMP)
     out.parallel_compiled = true;
     out.max_threads = omp_get_max_threads();
     out.parallel_enabled = out.max_threads > 1;
 #endif
-
     out.bit_ops_backend = out.avx2_available ? "avx2" : "scalar";
     out.fwht_backend = out.avx2_available ? "avx2" : "scalar";
 

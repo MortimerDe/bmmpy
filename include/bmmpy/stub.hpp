@@ -7,6 +7,8 @@ namespace bmmpy {
 struct RuntimeFeatures {
     bool avx2_compiled = false;
     bool avx2_available = false;
+    bool cuda_compiled = false;
+    bool cuda_available = false;
     bool parallel_compiled = false;
     bool parallel_enabled = false;
     int max_threads = 1;

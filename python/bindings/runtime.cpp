@@ -12,6 +12,8 @@ void bind_runtime(nb::module_& m) {
         .def(nb::init<>())
         .def_rw("avx2_compiled", &::bmmpy::RuntimeFeatures::avx2_compiled)
         .def_rw("avx2_available", &::bmmpy::RuntimeFeatures::avx2_available)
+        .def_rw("cuda_compiled", &::bmmpy::RuntimeFeatures::cuda_compiled)
+        .def_rw("cuda_available", &::bmmpy::RuntimeFeatures::cuda_available)
         .def_rw("parallel_compiled", &::bmmpy::RuntimeFeatures::parallel_compiled)
         .def_rw("parallel_enabled", &::bmmpy::RuntimeFeatures::parallel_enabled)
         .def_rw("max_threads", &::bmmpy::RuntimeFeatures::max_threads)
@@ -22,6 +24,8 @@ void bind_runtime(nb::module_& m) {
                    "avx2_compiled=" +
                    std::string(value.avx2_compiled ? "True" : "False") +
                    ", avx2_available=" + std::string(value.avx2_available ? "True" : "False") +
+                   ", cuda_compiled=" + std::string(value.cuda_compiled ? "True" : "False") +
+                   ", cuda_available=" + std::string(value.cuda_available ? "True" : "False") +
                    ", parallel_compiled=" +
                    std::string(value.parallel_compiled ? "True" : "False") +
                    ", parallel_enabled=" + std::string(value.parallel_enabled ? "True" : "False") +
