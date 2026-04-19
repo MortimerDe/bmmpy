@@ -35,7 +35,7 @@ int main() {
 
     bmmpy::BitMatrix bm = bmmpy::BitMatrix::load_text("___matrix.txt");
 
-    std::vector<std::size_t> rows = getRandomIndices(bm.rows(), 32);
+    std::vector<std::size_t> rows = getRandomIndices(bm.rows(), 28);
     auto window = bm.row_window(rows);
     std::cout << "window rows: " << window.materialize().weight() << std::endl;
     bmmpy::CudaMitmFwhtSearch searcher({64, 0});
