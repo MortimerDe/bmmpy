@@ -177,6 +177,10 @@ class PublicApiTests(unittest.TestCase):
 
         if features.cuda_available:
             self.assertTrue(features.cuda_compiled)
+    
+    def test_cuda_mitm_search_wrapper_name(self) -> None:
+        searcher = bmm.CudaMitmFwhtSearch(max_candidates=8, low_bits=0)
+        self.assertEqual(searcher.name(), "cuda_mitm_fwht")
 
 if __name__ == "__main__":
     unittest.main()

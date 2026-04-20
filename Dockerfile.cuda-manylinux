@@ -1,0 +1,35 @@
+FROM quay.io/pypa/manylinux_2_28_x86_64
+
+ARG CUDA_SHORT=13-0
+
+ENV CUDA_HOME=/usr/local/cuda
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+
+RUN dnf install -y \
+        dnf-plugins-core \
+        ca-certificates \
+        curl \
+        cmake \
+        ninja-build \
+        git \
+        patchelf \
+        which \
+        findutils \
+        tar \
+        xz \
+        gzip && \
+    dnf config-manager --add-repo \
+        https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo && \
+    dnf install -y \
+        cuda-toolkit-${CUDA_SHORT} && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
+
+RUN nvcc --version && \
+    cmake --version && \
+    ninja --version && \
+    /opt/python/cp312-cp312/bin/python -V
+
+WORKDIR /project

@@ -3,11 +3,14 @@ cmake_minimum_required(VERSION 3.15)
 project(bmmpy LANGUAGES CXX)
 
 option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" OFF)
+option(BMMPY_CUDA_STATIC_RUNTIME "Link CUDA runtime statically for CUDA builds" OFF)
 
 # Global project settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # bmmpy_core is linked into the Python extension, so it must be PIC-safe.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -119,7 +122,17 @@ if(BMMPY_ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
 
-    target_link_libraries(bmmpy_core PRIVATE CUDA::cudart)
+    target_sources(
+        bmmpy_core
+        PRIVATE
+            src/search/cuda_mitm_fwht_launch.cu
+    )
+
+    if(BMMPY_CUDA_STATIC_RUNTIME)
+        target_link_libraries(bmmpy_core PRIVATE CUDA::cudart_static)
+    else()
+        target_link_libraries(bmmpy_core PRIVATE CUDA::cudart)
+    endif()
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_CUDA_BACKEND=1)
 else()
     message(STATUS "CUDA backend disabled")
