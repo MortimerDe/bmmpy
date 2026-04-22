@@ -11,8 +11,11 @@ from collections.abc import Sequence
 from typing import TypeAlias
 
 from ..matrix import BitMatrix
+from .transforms import find_row_transform
 
 PolynomialLike: TypeAlias = str | tuple[int, Sequence[int]] | Sequence[int]
+BasisElementLike: TypeAlias = int | str
+BasisLike: TypeAlias = Sequence[BasisElementLike]
 
 
 def parse_poly(poly: PolynomialLike) -> tuple[int, list[int]]:
@@ -72,7 +75,13 @@ class Mastrovito:
 
     __slots__ = ("degree", "powers", "elem", "_m_alpha", "_period")
 
-    def __init__(self, poly: PolynomialLike, *, elem: int = 2) -> None:
+    def __init__(
+        self,
+        poly: PolynomialLike,
+        *,
+        elem: int = 2,
+        basis: BasisLike | None = None,
+    ) -> None:
         degree, powers = parse_poly(poly)
 
         if degree <= 0:
@@ -89,6 +98,13 @@ class Mastrovito:
         self.elem = elem
         self._period = (1 << degree) - 1
         self._m_alpha = _build_element_matrix(degree, powers, elem)
+
+        if basis is not None:
+            change = _build_basis_change_matrix(basis, degree, powers)
+            change_inv = _invert_matrix(change)
+            self._m_alpha = _matrix_to_rows(
+                change_inv @ _rows_to_matrix(self._m_alpha, degree, degree) @ change
+            )
 
     def __repr__(self) -> str:
         return f"Mastrovito(degree={self.degree}, powers={self.powers}, elem={self.elem})"
@@ -158,9 +174,9 @@ def build_check_matrix(
     *,
     start_i: int = 0,
     elem: int = 2,
+    basis: BasisLike | None = None,
 ) -> BitMatrix:
-    """Convenience wrapper for Mastrovito.build_check_matrix()."""
-    generator = Mastrovito(poly, elem=elem)
+    generator = Mastrovito(poly, elem=elem, basis=basis)
     return generator.build_check_matrix(c, k, start_i=start_i)
 
 
@@ -169,9 +185,9 @@ def get_mastrovito_matrix(
     power: int,
     *,
     elem: int = 2,
+    basis: BasisLike | None = None,
 ) -> BitMatrix:
-    """Convenience wrapper for Mastrovito.get_mastrovito_matrix()."""
-    generator = Mastrovito(poly, elem=elem)
+    generator = Mastrovito(poly, elem=elem, basis=basis)
     return generator.get_mastrovito_matrix(power)
 
 
@@ -343,6 +359,80 @@ def _write_block(matrix: BitMatrix, row_offset: int, col_offset: int, rows: Sequ
             matrix[row_offset + local_row, col_offset + bit_index] = True
             bits ^= low_bit
 
+def _build_basis_change_matrix(
+    basis: BasisLike,
+    degree: int,
+    poly_powers: Sequence[int],
+) -> BitMatrix:
+    if isinstance(basis, (str, bytes, bytearray)):
+        raise TypeError("basis must be a sequence of basis elements, not a single string")
+    if len(basis) != degree:
+        raise ValueError(f"basis must contain exactly {degree} elements")
+
+    matrix = BitMatrix(degree, degree)
+
+    for col_index, element in enumerate(basis):
+        element_bits = _basis_element_to_int(element, degree, poly_powers)
+        for row_index in range(degree):
+            if (element_bits >> row_index) & 1:
+                matrix[row_index, col_index] = True
+
+    if matrix.rank() != degree:
+        raise ValueError("basis elements must be linearly independent")
+
+    return matrix
+
+
+def _basis_element_to_int(
+    element: BasisElementLike,
+    degree: int,
+    poly_powers: Sequence[int],
+) -> int:
+    if isinstance(element, int):
+        if element < 0:
+            raise ValueError("basis powers must be non-negative")
+        return _powers_to_field_element([element], degree, poly_powers)
+
+    if isinstance(element, str):
+        _, powers = _parse_poly_string(element)
+        return _powers_to_field_element(powers, degree, poly_powers)
+
+    raise TypeError("basis elements must be ints or polynomial strings")
+
+
+def _powers_to_field_element(
+    powers: Sequence[int],
+    degree: int,
+    poly_powers: Sequence[int],
+) -> int:
+    value = 0
+    for power in powers:
+        value ^= _reduce_monomial(power, degree, poly_powers)
+    return value
+
+
+def _reduce_monomial(power: int, degree: int, poly_powers: Sequence[int]) -> int:
+    if power < 0:
+        raise ValueError("basis powers must be non-negative")
+
+    value = 1 << power
+    modulus = 0
+    for poly_power in poly_powers:
+        modulus |= 1 << poly_power
+
+    while value.bit_length() > degree:
+        shift = value.bit_length() - 1 - degree
+        value ^= modulus << shift
+
+    return value
+
+
+def _invert_matrix(matrix: BitMatrix) -> BitMatrix:
+    return find_row_transform(matrix, BitMatrix.identity(matrix.rows))
+
+
+def _matrix_to_rows(matrix: BitMatrix) -> list[int]:
+    return [int(row[::-1], 2) if row else 0 for row in matrix.to_rows()]
 
 __all__ = [
     "Mastrovito",
