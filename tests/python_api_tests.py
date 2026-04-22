@@ -169,5 +169,18 @@ class PublicApiTests(unittest.TestCase):
         with self.assertRaises(bmm.algebra.RowTransformError):
             bmm.algebra.find_row_transform(source, target)
 
+    def test_runtime_features_exposes_cuda_flags(self) -> None:
+        features = bmm.get_runtime_features()
+
+        self.assertTrue(hasattr(features, "cuda_compiled"))
+        self.assertTrue(hasattr(features, "cuda_available"))
+
+        if features.cuda_available:
+            self.assertTrue(features.cuda_compiled)
+    
+    def test_cuda_mitm_search_wrapper_name(self) -> None:
+        searcher = bmm.CudaMitmFwhtSearch(max_candidates=8, low_bits=0)
+        self.assertEqual(searcher.name(), "cuda_mitm_fwht")
+
 if __name__ == "__main__":
     unittest.main()

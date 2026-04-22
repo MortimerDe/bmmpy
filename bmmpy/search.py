@@ -22,6 +22,8 @@ from __future__ import annotations
 from ._bmmpy import (
     Candidate,
     RowWindow,
+    CudaMitmFwhtSearch as _NativeCudaMitmFwhtSearch,
+    CudaMitmFwhtSearchConfig as _NativeCudaMitmFwhtSearchConfig,
     FwhtSearch as _NativeFwhtSearch,
     FwhtSearchConfig as _NativeFwhtSearchConfig,
     MitmFwhtSearch as _NativeMitmFwhtSearch,
@@ -238,5 +240,57 @@ class MitmFwhtSearch:
         """
         return self._impl.search(window)
 
+class CudaMitmFwhtSearch:
+    """
+    Search for low-weight row combinations using the CUDA split-FWHT backend.
 
-__all__ = ["FwhtSearch", "MitmFwhtSearch"]
+    Parameters
+    ----------
+    max_candidates : int, default=64
+        Maximum number of candidates to return.
+    low_bits : int, default=0
+        Size of the low-half split. A value of 0 means auto.
+
+    Notes
+    -----
+    This searcher is intended for GPU execution on larger row windows.
+    The current native implementation validates GPU-compatible windows and
+    dispatches to the CUDA backend when available.
+
+    See Also
+    --------
+    MitmFwhtSearch
+        CPU split searcher for larger windows.
+    FwhtSearch
+        Direct FWHT strategy for smaller windows.
+    """
+
+    __slots__ = (
+        "max_candidates",
+        "low_bits",
+        "_impl",
+    )
+
+    def __init__(self, *, max_candidates: int = 64, low_bits: int = 0) -> None:
+        config = _NativeCudaMitmFwhtSearchConfig()
+        config.max_candidates = max_candidates
+        config.low_bits = low_bits
+
+        self.max_candidates = max_candidates
+        self.low_bits = low_bits
+        self._impl = _NativeCudaMitmFwhtSearch(config)
+
+    def __repr__(self) -> str:
+        return (
+            "CudaMitmFwhtSearch("
+            f"max_candidates={self.max_candidates}, "
+            f"low_bits={self.low_bits})"
+        )
+
+    def name(self) -> str:
+        return self._impl.name()
+
+    def search(self, window: RowWindow) -> list[Candidate]:
+        return self._impl.search(window)
+
+__all__ = ["FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch"]

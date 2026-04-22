@@ -1,10 +1,10 @@
 #pragma once
 
 #include "bmmpy/search/searcher.hpp"
+#include "bmmpy/search/split_window_prep.hpp"
 
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -26,26 +26,23 @@ public:
     const char* name() const noexcept override { return "mitm_fwht"; }
 
 private:
-    static constexpr std::size_t kMaxTLeft = 30;
-    static constexpr std::size_t kMaxTHalf = 31;
+    static constexpr std::size_t kMaxLowBits = 30;
+    static constexpr std::size_t kMaxHalfBits = 31;
 
     static std::pair<std::size_t, std::size_t> get_split_info(std::size_t t) noexcept;
 
-    void ensure_capacity(std::size_t cols, std::size_t t_left, std::size_t n_right);
+    void
+    ensure_capacity(std::size_t unique_patterns, std::size_t low_bits, std::size_t high_states);
 
-    std::pair<std::size_t, std::int32_t>
-    prepare_columns(const std::vector<const std::uint64_t*>& rows,
-                    std::size_t words_per_row,
-                    std::size_t cols,
-                    std::size_t t_left);
+    void build_adjacency(const CompactSplitWindow& prep);
 
-    void initialize_buckets(std::size_t unique_count, std::size_t n_right);
+    void initialize_buckets(const CompactSplitWindow& prep);
 
     void apply_bit_flip(std::size_t bit);
 
-    void process_candidate(std::uint32_t x_left,
-                           std::size_t n_right,
-                           std::size_t t_left,
+    void process_candidate(std::uint32_t x_low,
+                           std::size_t n_high,
+                           std::size_t low_bits,
                            std::int32_t total_weight,
                            std::int32_t& min_score_threshold,
                            std::uint32_t& worst_weight);
@@ -57,7 +54,6 @@ private:
                     std::uint32_t& worst_weight);
 
     std::vector<std::int64_t> _col_data;
-    std::vector<std::uint32_t> _left_masks;
 
     std::vector<std::size_t> _adj_offsets;
     std::vector<std::int32_t> _adj_indices;
@@ -66,7 +62,6 @@ private:
     std::vector<std::int32_t> _buckets;
     std::vector<std::int32_t> _fwht_buffer;
 
-    std::unordered_map<std::uint64_t, std::int32_t> _col_map;
     std::vector<Candidate> _candidates;
 
     MitmFwhtSearchConfig _config;

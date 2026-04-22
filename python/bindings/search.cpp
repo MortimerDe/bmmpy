@@ -1,5 +1,6 @@
 #include "bindings.hpp"
 #include "bmmpy/core/row_window.hpp"
+#include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/mitm_fwht_search.hpp"
 
@@ -23,6 +24,11 @@ void bind_search(nb::module_& m) {
         .def_rw("reserve_right_states", &::bmmpy::MitmFwhtSearchConfig::reserve_right_states)
         .def_rw("max_candidates", &::bmmpy::MitmFwhtSearchConfig::max_candidates);
 
+    nb::class_<::bmmpy::CudaMitmFwhtSearchConfig>(m, "CudaMitmFwhtSearchConfig")
+        .def(nb::init<>())
+        .def_rw("max_candidates", &::bmmpy::CudaMitmFwhtSearchConfig::max_candidates)
+        .def_rw("low_bits", &::bmmpy::CudaMitmFwhtSearchConfig::low_bits);
+
     nb::class_<::bmmpy::FwhtSearch>(m, "FwhtSearch")
         .def(nb::init<::bmmpy::FwhtSearchConfig>(), nb::arg("config") = ::bmmpy::FwhtSearchConfig{})
         .def("name", &::bmmpy::FwhtSearch::name)
@@ -33,6 +39,12 @@ void bind_search(nb::module_& m) {
              nb::arg("config") = ::bmmpy::MitmFwhtSearchConfig{})
         .def("name", &::bmmpy::MitmFwhtSearch::name)
         .def("search", &::bmmpy::MitmFwhtSearch::search, nb::arg("window"));
+
+    nb::class_<::bmmpy::CudaMitmFwhtSearch>(m, "CudaMitmFwhtSearch")
+        .def(nb::init<::bmmpy::CudaMitmFwhtSearchConfig>(),
+             nb::arg("config") = ::bmmpy::CudaMitmFwhtSearchConfig{})
+        .def("name", &::bmmpy::CudaMitmFwhtSearch::name)
+        .def("search", &::bmmpy::CudaMitmFwhtSearch::search, nb::arg("window"));
 }
 
 } // namespace bmmpy::bindings

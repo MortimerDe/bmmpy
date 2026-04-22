@@ -1,14 +1,18 @@
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
+#include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/searcher.hpp"
+#include "bmmpy/search/split_window_prep.hpp"
+#include "bmmpy/stub.hpp"
 
 #include <bmmpy/search/mitm_fwht_search.hpp>
 #include <cstdint>
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -42,6 +46,25 @@ bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) 
         }
 
         ++row_index;
+    }
+
+    return matrix;
+}
+
+bmmpy::BitMatrix make_cuda_equivalence_matrix(std::size_t rows = 28, std::size_t cols = 96) {
+    bmmpy::BitMatrix matrix(rows, cols);
+
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (std::size_t col = 0; col < cols; ++col) {
+            const std::uint64_t mix =
+                (static_cast<std::uint64_t>(row + 1) * 0x9E3779B185EBCA87ull) ^
+                (static_cast<std::uint64_t>(col + 3) * 0xC2B2AE3D27D4EB4Full) ^
+                (static_cast<std::uint64_t>(row + col + 11) * 0x165667B19E3779F9ull);
+
+            const std::uint64_t folded = mix ^ (mix >> 17) ^ (mix >> 33);
+            if ((folded & 1ull) != 0)
+                matrix.set(row, col, true);
+        }
     }
 
     return matrix;
@@ -82,6 +105,30 @@ template <typename Fn> void expect_out_of_range(Fn&& fn, std::string_view contex
     }
 
     fail(std::string(context) + ": expected std::out_of_range");
+}
+
+template <typename Fn> void expect_invalid_argument(Fn&& fn, std::string_view context) {
+    try {
+        fn();
+    } catch (const std::invalid_argument&) {
+        return;
+    } catch (const std::exception& ex) {
+        fail(std::string(context) + ": expected std::invalid_argument, got: " + ex.what());
+    }
+
+    fail(std::string(context) + ": expected std::invalid_argument");
+}
+
+template <typename Fn> void expect_runtime_error(Fn&& fn, std::string_view context) {
+    try {
+        fn();
+    } catch (const std::runtime_error&) {
+        return;
+    } catch (const std::exception& ex) {
+        fail(std::string(context) + ": expected std::runtime_error, got: " + ex.what());
+    }
+
+    fail(std::string(context) + ": expected std::runtime_error");
 }
 
 void test_fixed_weight_masks_u32() {
@@ -282,6 +329,105 @@ void test_mitm_fwht_searcher_interface_dispatch() {
     require_same_candidates(actual, expected, "mitm searcher dispatch");
 }
 
+void test_compact_split_window_collects_expected_patterns() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "11001",
+        "00100",
+        "01101",
+        "01001",
+    });
+
+    const auto window = matrix.row_window({0, 1, 2, 3});
+    const auto compact = bmmpy::build_compact_split_window(window, 2);
+
+    require(compact.t == 4, "compact_split_window t");
+    require(compact.low_bits == 2, "compact_split_window low_bits");
+    require(compact.high_bits == 2, "compact_split_window high_bits");
+    require(compact.total_weight == 4, "compact_split_window total_weight");
+
+    require_eq<std::uint64_t>(compact.q,
+                              {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{3}},
+                              "compact_split_window q");
+    require_eq<std::uint64_t>(compact.r,
+                              {std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{1}},
+                              "compact_split_window r");
+    require_eq<std::int32_t>(compact.multiplicity, {1, 1, 2}, "compact_split_window multiplicity");
+}
+
+void test_cuda_runtime_features_are_consistent() {
+    const auto features = bmmpy::get_runtime_features();
+    require(!(features.cuda_available && !features.cuda_compiled),
+            "cuda_available implies cuda_compiled");
+}
+
+void test_cuda_mitm_fwht_searcher_interface_dispatch() {
+    std::unique_ptr<bmmpy::Searcher> searcher =
+        std::make_unique<bmmpy::CudaMitmFwhtSearch>(bmmpy::CudaMitmFwhtSearchConfig{});
+
+    require(std::string_view(searcher->name()) == "cuda_mitm_fwht", "cuda mitm searcher name");
+}
+
+void test_cuda_mitm_fwht_validates_window_size() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "10101",
+        "11100",
+        "00111",
+    });
+
+    bmmpy::CudaMitmFwhtSearch search;
+    const auto window = matrix.row_window({0, 1, 2});
+
+    expect_invalid_argument([&] { (void)search.search(window); }, "cuda mitm searcher window size");
+}
+
+void test_cuda_mitm_fwht_validates_low_bits() {
+    bmmpy::BitMatrix matrix(28, 4);
+    matrix.set(0, 0, true);
+
+    bmmpy::CudaMitmFwhtSearch search({64, 28});
+    const auto window = matrix.row_window({
+        0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13,
+        14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+    });
+
+    expect_invalid_argument([&] { (void)search.search(window); }, "cuda mitm searcher low_bits");
+}
+
+void test_cuda_mitm_fwht_rejects_non_int16_safe_total_weight() {
+    bmmpy::BitMatrix matrix(28, 32768);
+    for (std::size_t col = 0; col < 32768; ++col)
+        matrix.set(0, col, true);
+
+    bmmpy::CudaMitmFwhtSearch search;
+    const auto window = matrix.row_window({
+        0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13,
+        14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+    });
+
+    expect_invalid_argument([&] { (void)search.search(window); },
+                            "cuda mitm searcher int16-safe total_weight");
+}
+
+void test_cuda_mitm_fwht_matches_cpu_mitm_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
+
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix();
+
+    std::vector<std::size_t> rows(28);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::MitmFwhtSearch cpu(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 8});
+    bmmpy::CudaMitmFwhtSearch gpu(bmmpy::CudaMitmFwhtSearchConfig{8, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_mitm_fwht matches cpu mitm");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -297,12 +443,24 @@ int main() {
         {"fwht_i16_wrap", &test_fwht_i16_wrap},
         {"calc_scores_and_order_i32", &test_calc_scores_and_order_i32},
         {"calc_scores_and_order_i16", &test_calc_scores_and_order_i16},
+        {"compact_split_window_collects_expected_patterns",
+         &test_compact_split_window_collects_expected_patterns},
         {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
         {"fwht_search_respects_k", &test_fwht_search_respects_k},
         {"fwht_search_window_bounds", &test_fwht_search_window_bounds},
         {"searcher_interface_dispatch", &test_searcher_interface_dispatch},
         {"mitm_fwht_matches_fwht_search", &test_mitm_fwht_matches_fwht_search},
-        {"mitm_fwht_searcher_interface_dispatch", &test_mitm_fwht_searcher_interface_dispatch}};
+        {"mitm_fwht_searcher_interface_dispatch", &test_mitm_fwht_searcher_interface_dispatch},
+        {"cuda_runtime_features_are_consistent", &test_cuda_runtime_features_are_consistent},
+        {"cuda_mitm_fwht_searcher_interface_dispatch",
+         &test_cuda_mitm_fwht_searcher_interface_dispatch},
+        {"cuda_mitm_fwht_validates_window_size", &test_cuda_mitm_fwht_validates_window_size},
+        {"cuda_mitm_fwht_validates_low_bits", &test_cuda_mitm_fwht_validates_low_bits},
+        {"cuda_mitm_fwht_rejects_non_int16_safe_total_weight",
+         &test_cuda_mitm_fwht_rejects_non_int16_safe_total_weight},
+        {"cuda_mitm_fwht_matches_cpu_mitm_when_available",
+         &test_cuda_mitm_fwht_matches_cpu_mitm_when_available},
+    };
 
     for (const TestCase& test : tests) {
         try {

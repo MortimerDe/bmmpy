@@ -2,17 +2,21 @@ cmake_minimum_required(VERSION 3.15)
 
 project(bmmpy LANGUAGES CXX)
 
+option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" OFF)
+option(BMMPY_CUDA_STATIC_RUNTIME "Link CUDA runtime statically for CUDA builds" OFF)
 
 # Global project settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # bmmpy_core is linked into the Python extension, so it must be PIC-safe.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(CTest)
-
+include(CheckLanguage)
 
 # Project version
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENT)
@@ -47,6 +51,8 @@ target_sources(
 
         src/search/fwht_search.cpp
         src/search/mitm_fwht_search.cpp
+        src/search/split_window_prep.cpp
+        src/search/cuda_mitm_fwht_search.cpp
 )
 
 target_include_directories(
@@ -105,6 +111,31 @@ if(OpenMP_CXX_FOUND)
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_OPENMP=1)
 else()
     message(STATUS "OpenMP not found; building without parallel FWHT backend")
+endif()
+
+if(BMMPY_ENABLE_CUDA)
+    check_language(CUDA)
+    if(NOT CMAKE_CUDA_COMPILER)
+        message(FATAL_ERROR "BMMPY_ENABLE_CUDA=ON but no CUDA compiler was found")
+    endif()
+
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+
+    target_sources(
+        bmmpy_core
+        PRIVATE
+            src/search/cuda_mitm_fwht_launch.cu
+    )
+
+    if(BMMPY_CUDA_STATIC_RUNTIME)
+        target_link_libraries(bmmpy_core PRIVATE CUDA::cudart_static)
+    else()
+        target_link_libraries(bmmpy_core PRIVATE CUDA::cudart)
+    endif()
+    target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_CUDA_BACKEND=1)
+else()
+    message(STATUS "CUDA backend disabled")
 endif()
 
 find_package(
