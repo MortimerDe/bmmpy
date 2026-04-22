@@ -14,7 +14,8 @@ from ..matrix import BitMatrix
 from .transforms import find_row_transform
 
 PolynomialLike: TypeAlias = str | tuple[int, Sequence[int]] | Sequence[int]
-BasisElementLike: TypeAlias = int | str
+FieldElementLike: TypeAlias = str | Sequence[int]
+BasisElementLike: TypeAlias = int | FieldElementLike
 BasisLike: TypeAlias = Sequence[BasisElementLike]
 
 
@@ -68,36 +69,38 @@ class Mastrovito:
     ----------
     poly : str | tuple[int, Sequence[int]] | Sequence[int]
         Irreducible polynomial representation.
-    elem : int, default=2
-        Base field element used to build the multiplication matrix. The default
-        value ``2`` corresponds to ``x`` in the polynomial basis.
+    basis : Sequence[int | str | Sequence[int]] | None, default=None
+        Ordered basis used for the returned coordinate system. Integers denote
+        monomials ``x^i``. Strings and sequences denote general field elements
+        in polynomial form.
+    element : str | Sequence[int], default="x"
+        Non-zero field element used to build the multiplication matrix.
+        Examples: ``"x"``, ``"x^7 + x + 1"``, ``[7, 1, 0]``.
     """
 
-    __slots__ = ("degree", "powers", "elem", "_m_alpha", "_period")
+    __slots__ = ("degree", "powers", "element", "_m_alpha", "_period")
 
     def __init__(
         self,
         poly: PolynomialLike,
         *,
-        elem: int = 2,
         basis: BasisLike | None = None,
+        element: FieldElementLike = "x",
     ) -> None:
         degree, powers = parse_poly(poly)
 
         if degree <= 0:
             raise ValueError("Polynomial degree must be positive")
-        if elem <= 0:
-            raise ValueError("Element must be positive")
-        if elem >= (1 << degree):
-            raise ValueError(
-                f"Element {elem} does not fit into the degree-{degree} field representation"
-            )
+
+        element_bits = _field_element_to_int(element, degree, powers)
+        if element_bits == 0:
+            raise ValueError("element must be non-zero")
 
         self.degree = degree
         self.powers = powers
-        self.elem = elem
+        self.element = element
         self._period = (1 << degree) - 1
-        self._m_alpha = _build_element_matrix(degree, powers, elem)
+        self._m_alpha = _build_element_matrix(degree, powers, element_bits)
 
         if basis is not None:
             change = _build_basis_change_matrix(basis, degree, powers)
@@ -107,7 +110,10 @@ class Mastrovito:
             )
 
     def __repr__(self) -> str:
-        return f"Mastrovito(degree={self.degree}, powers={self.powers}, elem={self.elem})"
+        return (
+            f"Mastrovito(degree={self.degree}, powers={self.powers}, "
+            f"element={self.element!r})"
+        )
 
     def get_mastrovito_matrix(self, power: int) -> BitMatrix:
         """Return the degree x degree Mastrovito block for the given power."""
@@ -173,10 +179,10 @@ def build_check_matrix(
     k: int,
     *,
     start_i: int = 0,
-    elem: int = 2,
     basis: BasisLike | None = None,
+    element: FieldElementLike = "x",
 ) -> BitMatrix:
-    generator = Mastrovito(poly, elem=elem, basis=basis)
+    generator = Mastrovito(poly, basis=basis, element=element)
     return generator.build_check_matrix(c, k, start_i=start_i)
 
 
@@ -184,10 +190,10 @@ def get_mastrovito_matrix(
     poly: PolynomialLike,
     power: int,
     *,
-    elem: int = 2,
     basis: BasisLike | None = None,
+    element: FieldElementLike = "x",
 ) -> BitMatrix:
-    generator = Mastrovito(poly, elem=elem, basis=basis)
+    generator = Mastrovito(poly, basis=basis, element=element)
     return generator.get_mastrovito_matrix(power)
 
 
@@ -390,14 +396,18 @@ def _basis_element_to_int(
 ) -> int:
     if isinstance(element, int):
         if element < 0:
-            raise ValueError("basis powers must be non-negative")
+            raise ValueError("Basis monomial powers must be non-negative")
         return _powers_to_field_element([element], degree, poly_powers)
 
     if isinstance(element, str):
-        _, powers = _parse_poly_string(element)
-        return _powers_to_field_element(powers, degree, poly_powers)
+        return _field_element_to_int(element, degree, poly_powers)
 
-    raise TypeError("basis elements must be ints or polynomial strings")
+    if isinstance(element, Sequence) and not isinstance(element, (bytes, bytearray, str)):
+        return _field_element_to_int(element, degree, poly_powers)
+
+    raise TypeError(
+        "basis elements must be ints, polynomial strings, or sequences of powers"
+    )
 
 
 def _powers_to_field_element(
@@ -433,6 +443,104 @@ def _invert_matrix(matrix: BitMatrix) -> BitMatrix:
 
 def _matrix_to_rows(matrix: BitMatrix) -> list[int]:
     return [int(row[::-1], 2) if row else 0 for row in matrix.to_rows()]
+
+def _field_element_to_int(
+    element: FieldElementLike,
+    degree: int,
+    poly_powers: Sequence[int],
+) -> int:
+    powers = _parse_field_element(element)
+    return _powers_to_field_element(powers, degree, poly_powers)
+
+
+def _parse_field_element(element: FieldElementLike) -> list[int]:
+    if isinstance(element, str):
+        return _parse_field_element_string(element)
+
+    if isinstance(element, Sequence) and not isinstance(element, (bytes, bytearray, str)):
+        return _normalize_field_element_powers(element)
+
+    raise TypeError("element must be a polynomial string or sequence of powers")
+
+
+def _parse_field_element_string(element: str) -> list[int]:
+    powers = _parse_symbolic_powers(
+        element,
+        label="Field element",
+        allow_zero=True,
+    )
+    return _normalize_field_element_powers(powers)
+
+
+def _parse_poly_string(poly: str) -> tuple[int, list[int]]:
+    powers = _parse_symbolic_powers(
+        poly,
+        label="Polynomial",
+        allow_zero=False,
+    )
+    return _normalize_powers(powers)
+
+
+def _parse_symbolic_powers(
+    text: str,
+    *,
+    label: str,
+    allow_zero: bool,
+) -> list[int]:
+    compact = text.replace(" ", "")
+    if not compact:
+        raise ValueError(f"{label} string is empty")
+
+    terms = [term for term in compact.replace("-", "+").split("+") if term]
+    if not terms:
+        raise ValueError(f"{label} string is empty")
+
+    powers: list[int] = []
+    for term in terms:
+        if term == "0":
+            continue
+
+        if term == "1":
+            powers.append(0)
+            continue
+
+        if term == "x":
+            powers.append(1)
+            continue
+
+        if term.startswith("x**"):
+            exponent_text = term[3:]
+        elif term.startswith("x^"):
+            exponent_text = term[2:]
+        else:
+            raise ValueError(f"Unsupported {label.lower()} term: {term!r}")
+
+        if not exponent_text.isdigit():
+            raise ValueError(f"Invalid exponent in {label.lower()} term: {term!r}")
+
+        powers.append(int(exponent_text))
+
+    if not powers and not allow_zero:
+        raise ValueError(f"{label} must contain at least one non-zero term")
+
+    return powers
+
+
+def _normalize_field_element_powers(values: Sequence[int]) -> list[int]:
+    parity: dict[int, bool] = {}
+
+    for value in values:
+        if not isinstance(value, int):
+            raise TypeError("Field element powers must be integers")
+        if value < 0:
+            raise ValueError("Field element powers must be non-negative")
+
+        parity[value] = not parity.get(value, False)
+
+    return sorted(
+        (power for power, keep in parity.items() if keep),
+        reverse=True,
+    )
 
 __all__ = [
     "Mastrovito",
