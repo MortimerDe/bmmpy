@@ -428,6 +428,26 @@ void test_cuda_mitm_fwht_matches_cpu_mitm_when_available() {
     require_same_candidates(actual, expected, "cuda_mitm_fwht matches cpu mitm");
 }
 
+void test_cuda_mitm_fwht_supports_128_candidates_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
+
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix();
+
+    std::vector<std::size_t> rows(28);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::MitmFwhtSearch cpu(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 128});
+    bmmpy::CudaMitmFwhtSearch gpu(bmmpy::CudaMitmFwhtSearchConfig{128, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_mitm_fwht supports 128 candidates");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -460,6 +480,8 @@ int main() {
          &test_cuda_mitm_fwht_rejects_non_int16_safe_total_weight},
         {"cuda_mitm_fwht_matches_cpu_mitm_when_available",
          &test_cuda_mitm_fwht_matches_cpu_mitm_when_available},
+        {"cuda_mitm_fwht_supports_128_candidates_when_available",
+         &test_cuda_mitm_fwht_supports_128_candidates_when_available},
     };
 
     for (const TestCase& test : tests) {
