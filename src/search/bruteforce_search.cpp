@@ -1,4 +1,8 @@
+#include "bmmpy/search/bruteforce_search.hpp"
+
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/detail/bit_intrinsics.hpp"
+#include "bmmpy/core/detail/bit_ops.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -102,5 +106,97 @@ private:
     std::size_t _size = 0;
 };
 
+std::size_t resolve_chunk_bits(const std::size_t t, const std::size_t configured_chunk_bits) {
+    if (configured_chunk_bits == 0)
+        return std::min<std::size_t>(t, kAutoChunkBits);
+
+    if (configured_chunk_bits > t || configured_chunk_bits >= Candidate::k_word_bits) {
+        throw std::invalid_argument(
+            "BruteforceSearch: chunk_bits must be in [1, min(t, 63)] or 0 for auto");
+    }
+
+    return configured_chunk_bits;
+}
+
+template <typename Buffer>
+void sweep_prefix(const std::vector<const std::uint64_t*>& rows,
+                  const std::size_t t,
+                  const std::size_t chunk_bits,
+                  const std::uint64_t prefix,
+                  Buffer& current,
+                  const std::size_t word_count,
+                  std::vector<TopKEntry>& best,
+                  const std::size_t k) {
+    auto* current_words = current.data();
+    std::fill_n(current_words, word_count, std::uint64_t{0});
+
+    const auto& bit_ops = detail::bit_ops();
+    const std::size_t high_bits = t - chunk_bits;
+
+    for (std::size_t high = 0; high < high_bits; ++high) {
+        if (((prefix >> high) & 1ull) == 0)
+            continue;
+
+        bit_ops.row_xor(current_words, rows[chunk_bits + high], word_count);
+    }
+
+    std::uint64_t current_mask = prefix << chunk_bits;
+    if (current_mask != 0) {
+        insert_topk(best,
+                    k,
+                    TopKEntry{
+                        current_mask,
+                        checked_weight(bit_ops.row_popcount(current_words, word_count)),
+                    });
+    }
+
+    const std::uint64_t low_states = std::uint64_t{1} << chunk_bits;
+    for (std::uint64_t step = 1; step < low_states; ++step) {
+        const std::size_t bit = static_cast<std::size_t>(detail::ctz64(step));
+        bit_ops.row_xor(current_words, rows[bit], word_count);
+        current_mask ^= (std::uint64_t{1} << bit);
+
+        insert_topk(best,
+                    k,
+                    TopKEntry{
+                        current_mask,
+                        checked_weight(bit_ops.row_popcount(current_words, word_count)),
+                    });
+    }
+}
+
 } // namespace
+
+std::vector<Candidate> BruteforceSearch::search(const RowWindow& window) {
+    if (_config.max_candidates == 0)
+        return {};
+
+    const std::size_t t = window.size();
+    if (t == 0)
+        return {};
+
+    if (t > Candidate::k_word_bits) {
+        throw std::invalid_argument("BruteforceSearch: window_rows size must be <= 64");
+    }
+
+    if (window.words_per_row() == 0)
+        return {};
+
+    if (window.cols() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+        throw std::overflow_error("BruteforceSearch: window width exceeds candidate weight range");
+    }
+
+    const std::size_t chunk_bits = resolve_chunk_bits(t, _config.chunk_bits);
+
+    switch (window.words_per_row()) {
+    case 8:
+        return run_fixed_word_search<8>(window, chunk_bits, _config.max_candidates);
+    case 16:
+        return run_fixed_word_search<16>(window, chunk_bits, _config.max_candidates);
+    default:
+        throw std::invalid_argument("BruteforceSearch: unsupported window width (only 512/64=8 or "
+                                    "1024/64=16 words per row supported)");
+    }
+}
+
 } // namespace bmmpy
