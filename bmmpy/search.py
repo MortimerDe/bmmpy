@@ -22,6 +22,8 @@ from __future__ import annotations
 from ._bmmpy import (
     Candidate,
     RowWindow,
+    BruteforceSearch as _NativeBruteforceSearch,
+    BruteforceSearchConfig as _NativeBruteforceSearchConfig,
     CudaMitmFwhtSearch as _NativeCudaMitmFwhtSearch,
     CudaMitmFwhtSearchConfig as _NativeCudaMitmFwhtSearchConfig,
     FwhtSearch as _NativeFwhtSearch,
@@ -30,6 +32,55 @@ from ._bmmpy import (
     MitmFwhtSearchConfig as _NativeMitmFwhtSearchConfig,
 )
 
+class BruteforceSearch:
+    """
+    Search for low-weight row combinations using exact direct brute force.
+
+    Parameters
+    ----------
+    max_candidates : int, default=64
+        Maximum number of candidates to return.
+    chunk_bits : int, default=0
+        Width of the Gray-swept low chunk. A value of 0 selects the native auto mode.
+
+    Notes
+    -----
+    This searcher targets narrow matrices where direct exact search over row
+    combinations is competitive. The native implementation partitions the mask
+    space by high-prefix, sweeps each chunk in Gray order, and keeps per-thread
+    exact top-k results before a final merge.
+
+    See Also
+    --------
+    FwhtSearch
+        Direct FWHT strategy for smaller windows.
+    MitmFwhtSearch
+        Split-FWHT strategy for larger windows.
+    """
+
+    __slots__ = ("max_candidates", "chunk_bits", "_impl")
+
+    def __init__(self, *, max_candidates: int = 64, chunk_bits: int = 0) -> None:
+        config = _NativeBruteforceSearchConfig()
+        config.max_candidates = max_candidates
+        config.chunk_bits = chunk_bits
+
+        self.max_candidates = max_candidates
+        self.chunk_bits = chunk_bits
+        self._impl = _NativeBruteforceSearch(config)
+
+    def __repr__(self) -> str:
+        return (
+            "BruteforceSearch("
+            f"max_candidates={self.max_candidates}, "
+            f"chunk_bits={self.chunk_bits})"
+        )
+
+    def name(self) -> str:
+        return self._impl.name()
+
+    def search(self, window: RowWindow) -> list[Candidate]:
+        return self._impl.search(window)
 
 class FwhtSearch:
     """
@@ -293,4 +344,4 @@ class CudaMitmFwhtSearch:
     def search(self, window: RowWindow) -> list[Candidate]:
         return self._impl.search(window)
 
-__all__ = ["FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch"]
+__all__ = ["BruteforceSearch", "FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch"]
