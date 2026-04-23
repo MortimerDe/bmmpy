@@ -6,8 +6,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <new>
 #include <stdexcept>
 #include <vector>
@@ -15,11 +15,12 @@
 #if defined(BMMPY_HAS_OPENMP)
 #include <omp.h>
 #endif
-#include <limits>
 
 namespace bmmpy {
 namespace {
+
 constexpr std::size_t kAutoChunkBits = 12;
+
 struct TopKEntry {
     std::uint64_t mask = 0;
     std::uint32_t weight = 0;
@@ -104,6 +105,7 @@ private:
         }
         _size = 0;
     }
+
     std::uint64_t* _data = nullptr;
     std::size_t _size = 0;
 };
@@ -260,6 +262,39 @@ run_fixed_word_search(const RowWindow& window, const std::size_t chunk_bits, con
     });
 }
 
+std::vector<Candidate> run_dynamic_word_search(const RowWindow& window,
+                                               const std::size_t chunk_bits,
+                                               const std::size_t k) {
+    const auto& rows = window.row_ptrs();
+    const std::size_t t = window.size();
+    const std::size_t word_count = window.words_per_row();
+
+    return run_prefix_parallel(t - chunk_bits, k, [&rows, t, chunk_bits, word_count, k]() {
+        struct Worker {
+            const std::vector<const std::uint64_t*>& rows;
+            std::size_t t;
+            std::size_t chunk_bits;
+            std::size_t word_count;
+            std::size_t k;
+            AlignedWordBuffer current;
+
+            Worker(const std::vector<const std::uint64_t*>& rows_value,
+                   const std::size_t t_value,
+                   const std::size_t chunk_bits_value,
+                   const std::size_t word_count_value,
+                   const std::size_t k_value)
+                : rows(rows_value), t(t_value), chunk_bits(chunk_bits_value),
+                  word_count(word_count_value), k(k_value), current(word_count_value) {}
+
+            void operator()(const std::uint64_t prefix, std::vector<TopKEntry>& local) {
+                sweep_prefix(rows, t, chunk_bits, prefix, current, word_count, local, k);
+            }
+        };
+
+        return Worker(rows, t, chunk_bits, word_count, k);
+    });
+}
+
 } // namespace
 
 std::vector<Candidate> BruteforceSearch::search(const RowWindow& window) {
@@ -289,8 +324,7 @@ std::vector<Candidate> BruteforceSearch::search(const RowWindow& window) {
     case 16:
         return run_fixed_word_search<16>(window, chunk_bits, _config.max_candidates);
     default:
-        throw std::invalid_argument("BruteforceSearch: unsupported window width (only 512/64=8 or "
-                                    "1024/64=16 words per row supported)");
+        return run_dynamic_word_search(window, chunk_bits, _config.max_candidates);
     }
 }
 
