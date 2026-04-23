@@ -13,6 +13,7 @@ def make_search_matrix() -> bmm.BitMatrix:
 
 class PublicApiTests(unittest.TestCase):
     def test_public_api_hides_configs_and_legacy_helpers(self) -> None:
+        self.assertFalse(hasattr(bmm, "BruteforceSearchConfig"))
         self.assertFalse(hasattr(bmm, "FwhtSearchConfig"))
         self.assertFalse(hasattr(bmm, "MitmFwhtSearchConfig"))
         self.assertFalse(hasattr(bmm, "make_fwht_config"))
@@ -181,6 +182,31 @@ class PublicApiTests(unittest.TestCase):
     def test_cuda_mitm_search_wrapper_name(self) -> None:
         searcher = bmm.CudaMitmFwhtSearch(max_candidates=8, low_bits=0)
         self.assertEqual(searcher.name(), "cuda_mitm_fwht")
+
+    def test_bruteforce_search_wrapper(self) -> None:
+        matrix = bmm.matrix_from_rows(
+            [
+                "110010101001",
+                "101100101100",
+                "011010011001",
+                "111000010111",
+                "000111100011",
+                "101011110000",
+            ]
+        )
+
+        fwht = bmm.FwhtSearch(max_rows=16, max_candidates=8)
+        brute = bmm.BruteforceSearch(max_candidates=8, chunk_bits=0)
+
+        window = matrix.row_window([0, 1, 2, 3, 4, 5])
+        expected = fwht.search(window)
+        actual = brute.search(window)
+
+        self.assertEqual(brute.name(), "bruteforce")
+        self.assertEqual(
+            [(candidate.mask_u64(), candidate.weight) for candidate in actual],
+            [(candidate.mask_u64(), candidate.weight) for candidate in expected],
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,12 +48,13 @@ from ._bmmpy import (
 from .apply import GreedySelection
 from .candidate import Candidate
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
-from .search import FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch
+from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch
 from .workflows import search_apply
 
 __all__ = [
     "ApplyResult",
     "BitMatrix",
+    "BruteforceSearch",
     "Candidate",
     "FwhtSearch",
     "GreedySelection",

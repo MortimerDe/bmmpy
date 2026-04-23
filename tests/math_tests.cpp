@@ -1,6 +1,7 @@
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
+#include "bmmpy/search/bruteforce_search.hpp"
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/searcher.hpp"
@@ -428,6 +429,85 @@ void test_cuda_mitm_fwht_matches_cpu_mitm_when_available() {
     require_same_candidates(actual, expected, "cuda_mitm_fwht matches cpu mitm");
 }
 
+void test_cuda_mitm_fwht_supports_128_candidates_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
+
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix();
+
+    std::vector<std::size_t> rows(28);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::MitmFwhtSearch cpu(bmmpy::MitmFwhtSearchConfig{1024, 20, std::size_t{1} << 16, 128});
+    bmmpy::CudaMitmFwhtSearch gpu(bmmpy::CudaMitmFwhtSearchConfig{128, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_mitm_fwht supports 128 candidates");
+}
+
+void test_bruteforce_search_respects_k() {
+    bmmpy::BitMatrix matrix(2, 5);
+    for (std::size_t col : {0u, 2u, 4u}) {
+        matrix.set(0, col, true);
+        matrix.set(1, col, true);
+    }
+
+    bmmpy::BruteforceSearch search({1, 0});
+    const auto window = matrix.row_window({0, 1});
+    const auto candidates = search.search(window);
+
+    require(candidates.size() == 1, "bruteforce_search k limit");
+    require(candidates[0].mask_u64() == 0x3ull, "bruteforce_search k best mask");
+    require(candidates[0].weight == 0, "bruteforce_search k best weight");
+}
+
+void test_bruteforce_search_matches_fwht_search() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "110010101001",
+        "101100101100",
+        "011010011001",
+        "111000010111",
+        "000111100011",
+        "101011110000",
+    });
+
+    const std::vector<std::size_t> window_rows = {0, 1, 2, 3, 4, 5};
+
+    bmmpy::FwhtSearch fwht({16, 8});
+    bmmpy::BruteforceSearch brute({8, 0});
+
+    const auto window = matrix.row_window(window_rows);
+    const auto expected = fwht.search(window);
+    const auto actual = brute.search(window);
+
+    require_same_candidates(actual, expected, "bruteforce matches fwht");
+}
+
+void test_bruteforce_searcher_interface_dispatch() {
+    const bmmpy::BitMatrix matrix = matrix_from_rows({
+        "10101",
+        "11100",
+        "00111",
+    });
+
+    bmmpy::FwhtSearch baseline({16, 4});
+    const auto window = matrix.row_window({0, 1, 2});
+    const auto expected = baseline.search(window);
+
+    std::unique_ptr<bmmpy::Searcher> searcher =
+        std::make_unique<bmmpy::BruteforceSearch>(bmmpy::BruteforceSearchConfig{4, 0});
+
+    require(std::string_view(searcher->name()) == "bruteforce", "bruteforce searcher name");
+
+    const auto dispatch_window = matrix.row_window({0, 1, 2});
+    const auto actual = searcher->search(dispatch_window);
+    require_same_candidates(actual, expected, "bruteforce searcher dispatch");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -460,6 +540,11 @@ int main() {
          &test_cuda_mitm_fwht_rejects_non_int16_safe_total_weight},
         {"cuda_mitm_fwht_matches_cpu_mitm_when_available",
          &test_cuda_mitm_fwht_matches_cpu_mitm_when_available},
+        {"cuda_mitm_fwht_supports_128_candidates_when_available",
+         &test_cuda_mitm_fwht_supports_128_candidates_when_available},
+        {"bruteforce_searcher_interface_dispatch", &test_bruteforce_searcher_interface_dispatch},
+        {"bruteforce_search_respects_k", &test_bruteforce_search_respects_k},
+        {"bruteforce_search_matches_fwht_search", &test_bruteforce_search_matches_fwht_search},
     };
 
     for (const TestCase& test : tests) {

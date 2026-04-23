@@ -4,7 +4,7 @@ High-level algebra helpers for bmmpy.
 
 from __future__ import annotations
 
-from .generators import Mastrovito, build_check_matrix, get_mastrovito_matrix, parse_poly
+from .mastrovito import Mastrovito, build_check_matrix, get_mastrovito_matrix, parse_poly
 from .transforms import RowTransformError, find_row_transform
 
 __all__ = [

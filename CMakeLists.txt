@@ -53,6 +53,7 @@ target_sources(
         src/search/mitm_fwht_search.cpp
         src/search/split_window_prep.cpp
         src/search/cuda_mitm_fwht_search.cpp
+        src/search/bruteforce_search.cpp
 )
 
 target_include_directories(
