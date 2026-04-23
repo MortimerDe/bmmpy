@@ -75,4 +75,4 @@ bump_ver: ## Bump project version
 
 release: ## Publish a release, e.g. make release VERSION=0.3.1
 	@[ -n "$(VERSION)" ] || (echo "VERSION is required"; exit 1)
-	$(PYTHON) scripts/release.py $(VERSION) --push
+	$(PYTHON) scripts/release.py create $(VERSION) --push
