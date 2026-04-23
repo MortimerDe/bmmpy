@@ -1,3 +1,5 @@
+#include "bmmpy/core/bit_matrix.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -51,6 +53,54 @@ std::uint32_t checked_weight(const std::uint64_t raw_weight) {
 
     return static_cast<std::uint32_t>(raw_weight);
 }
+
+class AlignedWordBuffer {
+public:
+    explicit AlignedWordBuffer(std::size_t words) : _size(words) {
+        if (_size == 0)
+            return;
+
+        _data = static_cast<std::uint64_t*>(::operator new[](
+            _size * sizeof(std::uint64_t), std::align_val_t(BitMatrix::k_alignment)));
+        std::fill_n(_data, _size, std::uint64_t{0});
+    }
+
+    ~AlignedWordBuffer() noexcept { reset(); }
+
+    AlignedWordBuffer(const AlignedWordBuffer&) = delete;
+    AlignedWordBuffer& operator=(const AlignedWordBuffer&) = delete;
+
+    AlignedWordBuffer(AlignedWordBuffer&& other) noexcept : _data(other._data), _size(other._size) {
+        other._data = nullptr;
+        other._size = 0;
+    }
+
+    AlignedWordBuffer& operator=(AlignedWordBuffer&& other) noexcept {
+        if (this == &other)
+            return *this;
+
+        reset();
+        _data = other._data;
+        _size = other._size;
+        other._data = nullptr;
+        other._size = 0;
+        return *this;
+    }
+
+    std::uint64_t* data() noexcept { return _data; }
+    const std::uint64_t* data() const noexcept { return _data; }
+
+private:
+    void reset() noexcept {
+        if (_data != nullptr) {
+            ::operator delete[](_data, std::align_val_t(BitMatrix::k_alignment));
+            _data = nullptr;
+        }
+        _size = 0;
+    }
+    std::uint64_t* _data = nullptr;
+    std::size_t _size = 0;
+};
 
 } // namespace
 } // namespace bmmpy
