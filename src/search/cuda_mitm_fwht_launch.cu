@@ -11,7 +11,7 @@
 namespace bmmpy {
 namespace {
 
-constexpr int kMaxCandidates = 64;
+constexpr int kMaxCandidates = 128;
 constexpr int kThreadsPerBlock = 256;
 constexpr int kWarpSize = 32;
 constexpr int kWarpCount = kThreadsPerBlock / kWarpSize;
@@ -560,7 +560,7 @@ std::vector<CudaMitmFwhtResult> run_cuda_mitm_fwht_search(const CompactSplitWind
         return {};
 
     if (max_candidates > kMaxCandidates) {
-        throw std::invalid_argument("run_cuda_mitm_fwht_search: max_candidates must be <= 64");
+        throw std::invalid_argument("run_cuda_mitm_fwht_search: max_candidates must be <= 128");
     }
 
     if (prep.low_bits == 0 || prep.low_bits > kMaxSpecializedLowBits) {
