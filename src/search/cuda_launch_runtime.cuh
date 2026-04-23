@@ -1,4 +1,3 @@
-// src/search/cuda_launch_runtime.cuh
 #pragma once
 
 #include <cstddef>
