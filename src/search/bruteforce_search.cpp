@@ -165,6 +165,99 @@ void sweep_prefix(const std::vector<const std::uint64_t*>& rows,
     }
 }
 
+std::vector<Candidate>
+merge_thread_results(const std::vector<std::vector<TopKEntry>>& thread_results,
+                     const std::size_t k) {
+    std::vector<TopKEntry> merged;
+    merged.reserve(k);
+
+    for (const auto& local : thread_results) {
+        for (const TopKEntry& entry : local)
+            insert_topk(merged, k, entry);
+    }
+
+    std::vector<Candidate> out;
+    out.reserve(merged.size());
+
+    for (const TopKEntry& entry : merged)
+        out.push_back(Candidate::from_u64(entry.mask, entry.weight));
+
+    return out;
+}
+
+template <typename WorkerFactory>
+std::vector<Candidate>
+run_prefix_parallel(const std::size_t high_bits, const std::size_t k, WorkerFactory&& make_worker) {
+    const std::uint64_t prefix_count =
+        high_bits == 0 ? std::uint64_t{1} : (std::uint64_t{1} << high_bits);
+
+    std::size_t thread_slots = 1;
+#if defined(BMMPY_HAS_OPENMP)
+    thread_slots = static_cast<std::size_t>(std::max(omp_get_max_threads(), 1));
+#endif
+
+    std::vector<std::vector<TopKEntry>> thread_results(thread_slots);
+    for (auto& local : thread_results)
+        local.reserve(k);
+
+#if defined(_OPENMP)
+    if (high_bits < 63) {
+#pragma omp parallel if (prefix_count > 1)
+        {
+            auto worker = make_worker();
+
+            int tid = 0;
+#if defined(BMMPY_HAS_OPENMP)
+            tid = omp_get_thread_num();
+#endif
+
+            auto& local = thread_results[static_cast<std::size_t>(tid)];
+            local.clear();
+
+#pragma omp for schedule(static)
+            for (long long prefix_index = 0; prefix_index < static_cast<long long>(prefix_count);
+                 ++prefix_index) {
+                worker(static_cast<std::uint64_t>(prefix_index), local);
+            }
+        }
+
+        return merge_thread_results(thread_results, k);
+    }
+#endif
+
+    auto worker = make_worker();
+    auto& local = thread_results[0];
+    local.clear();
+
+    for (std::uint64_t prefix = 0; prefix < prefix_count; ++prefix)
+        worker(prefix, local);
+
+    return merge_thread_results(thread_results, k);
+}
+
+template <std::size_t WordCount>
+std::vector<Candidate>
+run_fixed_word_search(const RowWindow& window, const std::size_t chunk_bits, const std::size_t k) {
+    const auto& rows = window.row_ptrs();
+    const std::size_t t = window.size();
+
+    return run_prefix_parallel(t - chunk_bits, k, [&rows, t, chunk_bits, k]() {
+        struct Worker {
+            const std::vector<const std::uint64_t*>& rows;
+            std::size_t t;
+            std::size_t chunk_bits;
+            std::size_t k;
+            alignas(BitMatrix::k_alignment) std::array<std::uint64_t, WordCount> current{};
+
+            void operator()(const std::uint64_t prefix, std::vector<TopKEntry>& local) {
+                sweep_prefix(rows, t, chunk_bits, prefix, current, WordCount, local, k);
+            }
+        };
+
+        return Worker{rows, t, chunk_bits, k};
+    });
+}
+
 } // namespace
 
 std::vector<Candidate> BruteforceSearch::search(const RowWindow& window) {
