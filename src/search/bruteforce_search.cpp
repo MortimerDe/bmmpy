@@ -5,8 +5,10 @@
 #include "bmmpy/core/detail/bit_ops.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 #include <stdexcept>
 #include <vector>
 
