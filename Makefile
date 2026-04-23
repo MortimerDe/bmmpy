@@ -1,83 +1,78 @@
-BUILD_DIR := build
+BUILD_DIR ?= build
 BUILD_TYPE ?= Debug
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
+CMAKE ?= cmake
+CTEST ?= ctest
+
+ENABLE_CUDA ?= OFF
 CIBW_BUILD ?= cp312-*
-CIBW_OUTPUT ?= dist
+DIST_DIR ?= dist
 VERSION ?=
-BENCH_BUILD_DIR ?= build-bench
-ENABLE_CUDA ?= ON
+
 CUDA_MANYLINUX_IMAGE ?= bmmpy-manylinux_2_28-cuda13.0
+CMAKE_ARGS ?= -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBMMPY_ENABLE_CUDA=$(ENABLE_CUDA)
 CUDA_WHEEL_CMAKE_ARGS ?= -DBMMPY_ENABLE_CUDA=ON -DBMMPY_CUDA_STATIC_RUNTIME=ON -DCMAKE_CUDA_ARCHITECTURES=all-major
 
-.PHONY: all configure build cli clean clean-build dev bump_ver stubs test test-py wheel wheel-manylinux wheel-manylinux-cuda wheel-tools release configure-bench build-bench bench
+.PHONY: help all configure build cli dev test test-py stubs wheel wheel-tools wheel-manylinux wheel-manylinux-cuda clean distclean clean-build bump_ver release
 
-all: build
+all: build ## Build default targets
 
-configure:
-	cmake -S . -B $(BUILD_DIR) -G Ninja -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBMMPY_ENABLE_CUDA=$(ENABLE_CUDA)
+help: ## Show available targets
+	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build: configure
-	cmake --build $(BUILD_DIR)
+configure: ## Configure CMake in $(BUILD_DIR)
+	$(CMAKE) -S . -B $(BUILD_DIR) -G Ninja $(CMAKE_ARGS)
 
-cli: build
+build: configure ## Build native targets
+	$(CMAKE) --build $(BUILD_DIR)
+
+cli: build ## Run the CLI executable
 	./$(BUILD_DIR)/cli
 
-clean:
-	cmake --build $(BUILD_DIR) --target clean
+dev: ## Install editable Python package
+	CMAKE_ARGS="$(CMAKE_ARGS)" $(PIP) install -e .
 
-clean-build:
-	rm -rf $(BUILD_DIR) dist wheelhouse
+test: build ## Run C++ tests
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
 
-dev:
-	CMAKE_ARGS="-DBMMPY_ENABLE_CUDA=$(ENABLE_CUDA)" $(PIP) install -e .
+test-py: ## Run Python API tests (run 'make dev' first)
+	$(PYTHON) -m unittest discover -s tests -p 'python_api_tests.py'
 
-wheel:
-	rm -rf dist
-	$(PIP) wheel . -w dist
+stubs: configure ## Generate Python stubs
+	$(CMAKE) --build $(BUILD_DIR) --target bmmpy_stub
 
-wheel-tools:
+wheel: ## Build a local wheel into $(DIST_DIR)
+	rm -rf $(DIST_DIR)
+	CMAKE_ARGS="$(CMAKE_ARGS)" $(PIP) wheel . -w $(DIST_DIR)
+
+wheel-tools: ## Install cibuildwheel
 	$(PIP) install cibuildwheel
 
-wheel-manylinux:
-	rm -rf $(CIBW_OUTPUT)
+wheel-manylinux: wheel-tools ## Build manylinux wheels
+	rm -rf $(DIST_DIR)
 	CIBW_BUILD="$(CIBW_BUILD)" \
 	CIBW_MANYLINUX_X86_64_IMAGE=manylinux2014 \
-	$(PYTHON) -m cibuildwheel --platform linux --output-dir $(CIBW_OUTPUT) \
+	$(PYTHON) -m cibuildwheel --platform linux --output-dir $(DIST_DIR)
 
-
-wheel-manylinux-cuda:
-	rm -rf $(CIBW_OUTPUT)
+wheel-manylinux-cuda: wheel-tools ## Build CUDA manylinux wheels
+	rm -rf $(DIST_DIR)
 	CIBW_BUILD="$(CIBW_BUILD)" \
 	CIBW_MANYLINUX_X86_64_IMAGE=$(CUDA_MANYLINUX_IMAGE) \
 	CIBW_ENVIRONMENT='CMAKE_ARGS="$(CUDA_WHEEL_CMAKE_ARGS)" CUDACXX=/usr/local/cuda/bin/nvcc' \
-	$(PYTHON) -m cibuildwheel --platform linux --output-dir $(CIBW_OUTPUT)
+	$(PYTHON) -m cibuildwheel --platform linux --output-dir $(DIST_DIR)
 
-bump_ver:
+clean: ## Remove products from $(BUILD_DIR)
+	@if [ -d "$(BUILD_DIR)" ]; then $(CMAKE) --build $(BUILD_DIR) --target clean; fi
+
+distclean: ## Remove build and dist directories
+	rm -rf $(BUILD_DIR) $(DIST_DIR)
+
+clean-build: distclean ## Backward-compatible alias
+
+bump_ver: ## Bump project version
 	$(PYTHON) scripts/bump_ver.py
 
-release:
-	test -n "$(VERSION)"
+release: ## Publish a release, e.g. make release VERSION=0.3.1
+	@[ -n "$(VERSION)" ] || (echo "VERSION is required"; exit 1)
 	$(PYTHON) scripts/release.py $(VERSION) --push
-
-test: build
-	ctest --test-dir $(BUILD_DIR) --output-on-failure
-
-stubs: configure
-	cmake --build $(BUILD_DIR) --target bmmpy_stub
-
-test-py: dev
-	$(PYTHON) -m unittest discover -s tests -p 'python_api_tests.py'
-
-configure-bench:
-	cmake -S . -B $(BENCH_BUILD_DIR) -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DBMMPY_BUILD_BENCHMARKS=ON
-
-build-bench: configure-bench
-	cmake --build $(BENCH_BUILD_DIR) --target fwht16_bench
-
-bench: build-bench
-	mkdir -p bench_results 
-	./$(BENCH_BUILD_DIR)/fwht16_bench --benchmark_out=bench_results/results_$(shell date +%Y%m%d_%H%M%S).json --benchmark_out_format=json
