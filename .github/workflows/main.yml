@@ -117,11 +117,52 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
+  build_wheels_cuda:
+    needs: validate
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pull CUDA manylinux image
+        run: docker pull demortimer/manylinux-cuda:13-0
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip cibuildwheel
+
+      - name: Build CUDA wheels
+        env:
+          CIBW_BUILD: cp312-*
+          CIBW_ARCHS: auto64
+          CIBW_MANYLINUX_X86_64_IMAGE: demortimer/manylinux-cuda:13-0
+          CIBW_ENVIRONMENT: >-
+            CMAKE_ARGS="-DBMMPY_ENABLE_CUDA=ON -DBMMPY_CUDA_STATIC_RUNTIME=ON -DCMAKE_CUDA_ARCHITECTURES=all-major"
+            CUDACXX=/usr/local/cuda/bin/nvcc
+          CIBW_TEST_COMMAND: >-
+            python -c "import bmmpy; f=bmmpy.get_runtime_features();
+            assert f.cuda_compiled; print(f); print(bmmpy.add(2, 3))"
+        run: python -m cibuildwheel --platform linux --output-dir dist
+
+      - name: Upload CUDA wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-cuda
+          path: dist/*.whl
+          if-no-files-found: error
+
   publish_release:
     needs:
       - validate
       - build_wheels
       - build_sdist
+      - build_wheels_cuda
     runs-on: ubuntu-22.04
     steps:
       - name: Download all artifacts
