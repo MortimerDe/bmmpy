@@ -1,9 +1,8 @@
 #include "bmmpy/search/cuda_bruteforce_launch.hpp"
-#include "cuda_launch_result_buffers.cuh"
-#include "cuda_launch_runtime.cuh"
-#include "cuda_launch_topk.cuh"
+#include "bmmpy/search/cuda_launch_topk.cuh"
 
-#include <limits>
+#include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 #include <vector>
 
@@ -12,12 +11,43 @@ namespace {
 
 using cuda_launch_detail::kMaxCandidates;
 
+constexpr std::size_t kAutoChunkBits = 12;
 constexpr std::size_t kSupportedWordsPerRow512 = 8;
 constexpr std::size_t kSupportedWordsPerRow1024 = 16;
 constexpr std::size_t kMaxRows = 64;
+constexpr std::size_t kMaskBits = 64;
 
 bool is_supported_words_per_row(const std::size_t words_per_row) noexcept {
     return words_per_row == kSupportedWordsPerRow512 || words_per_row == kSupportedWordsPerRow1024;
+}
+
+std::size_t resolve_chunk_bits(const std::size_t rows, const std::size_t configured_chunk_bits) {
+    if (rows == 0)
+        return 0;
+
+    if (configured_chunk_bits == 0) {
+        if (rows == 1)
+            return 1;
+
+        return std::min<std::size_t>(rows - 1, kAutoChunkBits);
+    }
+
+    if (configured_chunk_bits >= rows || configured_chunk_bits >= kMaskBits) {
+        throw std::invalid_argument(
+            "run_cuda_bruteforce_search: chunk_bits must be in [1, rows - 1] or 0 for auto");
+    }
+
+    return configured_chunk_bits;
+}
+
+std::uint64_t prefix_count_for(const std::size_t rows, const std::size_t chunk_bits) {
+    const std::size_t high_bits = rows - chunk_bits;
+    if (high_bits >= kMaskBits) {
+        throw std::invalid_argument(
+            "run_cuda_bruteforce_search: high-prefix bit count must be < 64");
+    }
+
+    return high_bits == 0 ? std::uint64_t{1} : (std::uint64_t{1} << high_bits);
 }
 
 } // namespace
@@ -50,8 +80,13 @@ std::vector<CudaBruteforceResult> run_cuda_bruteforce_search(const CudaBruteforc
             "run_cuda_bruteforce_search: chunk_bits must be in [1, rows - 1] or 0 for auto");
     }
 
-    throw std::runtime_error(
-        "run_cuda_bruteforce_search: CUDA brute-force backend is not implemented yet");
+    const std::size_t chunk_bits = resolve_chunk_bits(plan.rows, plan.chunk_bits);
+    const std::uint64_t prefix_count = prefix_count_for(plan.rows, chunk_bits);
+
+    (void)chunk_bits;
+    (void)prefix_count;
+
+    return {};
 }
 
 } // namespace bmmpy
