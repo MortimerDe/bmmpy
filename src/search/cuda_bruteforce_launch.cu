@@ -233,6 +233,76 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
     }
 }
 
+template <int WordCount> std::size_t recommend_persistent_blocks(const std::uint64_t prefix_count) {
+    int device = 0;
+    check_cuda(cudaGetDevice(&device), "cudaGetDevice");
+
+    cudaDeviceProp prop{};
+    check_cuda(cudaGetDeviceProperties(&prop, device), "cudaGetDeviceProperties");
+
+    int active_blocks_per_sm = 0;
+    check_cuda(
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &active_blocks_per_sm, bruteforce_persistent_kernel<WordCount>, kThreadsPerBlock, 0),
+        "cudaOccupancyMaxActiveBlocksPerMultiprocessor");
+
+    const std::uint64_t required_blocks =
+        (prefix_count + static_cast<std::uint64_t>(kThreadsPerBlock) - 1) /
+        static_cast<std::uint64_t>(kThreadsPerBlock);
+
+    const std::uint64_t desired_blocks =
+        static_cast<std::uint64_t>(std::max(prop.multiProcessorCount, 1)) *
+        static_cast<std::uint64_t>(std::max(active_blocks_per_sm, 1));
+
+    const std::uint64_t block_count =
+        std::min(required_blocks, std::max<std::uint64_t>(desired_blocks, 1));
+
+    return static_cast<std::size_t>(std::max<std::uint64_t>(block_count, 1));
+}
+
+template <int WordCount>
+void launch_bruteforce_kernel(BruteforceDeviceWorkspace& workspace,
+                              const std::size_t rows,
+                              const std::size_t chunk_bits,
+                              const std::uint64_t prefix_count,
+                              const std::size_t k) {
+    const std::size_t persistent_blocks = recommend_persistent_blocks<WordCount>(prefix_count);
+
+    ensure_result_buffers(workspace.results, persistent_blocks * k, k);
+
+    bruteforce_persistent_kernel<WordCount>
+        <<<static_cast<unsigned int>(persistent_blocks), kThreadsPerBlock>>>(
+            workspace.d_row_words,
+            static_cast<std::uint32_t>(rows),
+            static_cast<std::uint32_t>(chunk_bits),
+            prefix_count,
+            static_cast<std::uint32_t>(k),
+            workspace.results.d_block_results);
+    check_cuda(cudaGetLastError(), "bruteforce_persistent_kernel launch");
+
+    cuda_launch_detail::merge_topk_kernel<<<1, 1>>>(
+        workspace.results.d_block_results, persistent_blocks, k, workspace.results.d_out_results);
+    check_cuda(cudaGetLastError(), "merge_topk_kernel launch");
+}
+
+void dispatch_bruteforce_kernel(const CudaBruteforcePlan& plan,
+                                BruteforceDeviceWorkspace& workspace,
+                                const std::size_t chunk_bits,
+                                const std::uint64_t prefix_count,
+                                const std::size_t k) {
+    switch (plan.words_per_row) {
+    case kSupportedWordsPerRow512:
+        launch_bruteforce_kernel<8>(workspace, plan.rows, chunk_bits, prefix_count, k);
+        break;
+    case kSupportedWordsPerRow1024:
+        launch_bruteforce_kernel<16>(workspace, plan.rows, chunk_bits, prefix_count, k);
+        break;
+    default:
+        throw std::invalid_argument(
+            "run_cuda_bruteforce_search: only widths 512 and 1024 are supported");
+    }
+}
+
 BruteforceDeviceWorkspace& get_workspace() {
     thread_local BruteforceDeviceWorkspace workspace;
 
@@ -296,9 +366,8 @@ std::vector<CudaBruteforceResult> run_cuda_bruteforce_search(const CudaBruteforc
     BruteforceDeviceWorkspace& workspace = get_workspace();
     upload_plan(plan, workspace);
 
-    ensure_result_buffers(workspace.results, kThreadsPerBlock * max_candidates, max_candidates);
-
-    (void)prefix_count;
+    dispatch_bruteforce_kernel(plan, workspace, chunk_bits, prefix_count, max_candidates);
+    check_cuda(cudaDeviceSynchronize(), "cudaDeviceSynchronize");
 
     return {};
 }
