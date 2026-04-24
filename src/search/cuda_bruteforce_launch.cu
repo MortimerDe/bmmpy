@@ -12,6 +12,7 @@
 namespace bmmpy {
 namespace {
 
+using cuda_launch_detail::candidate_less;
 using cuda_launch_detail::check_cuda;
 using cuda_launch_detail::DeviceResultBuffers;
 using cuda_launch_detail::DeviceTopKEntry;
@@ -81,6 +82,157 @@ std::uint64_t prefix_count_for(const std::size_t rows, const std::size_t chunk_b
     return high_bits == 0 ? std::uint64_t{1} : (std::uint64_t{1} << high_bits);
 }
 
+__device__ inline unsigned int ctz64_device(const std::uint64_t value) {
+    return static_cast<unsigned int>(__ffsll(static_cast<unsigned long long>(value)) - 1);
+}
+
+__device__ inline void
+insert_topk_runtime(DeviceTopKEntry* best, int& size, const int k, const DeviceTopKEntry incoming) {
+    if (incoming.mask == 0 || k <= 0)
+        return;
+
+    if (size < k) {
+        best[size++] = incoming;
+    } else if (!candidate_less(incoming, best[size - 1])) {
+        return;
+    } else {
+        best[size - 1] = incoming;
+    }
+
+    for (int i = size - 1; i > 0; --i) {
+        if (!candidate_less(best[i], best[i - 1]))
+            break;
+
+        const DeviceTopKEntry tmp = best[i - 1];
+        best[i - 1] = best[i];
+        best[i] = tmp;
+    }
+}
+
+template <int WordCount> __device__ inline void zero_words(std::uint64_t (&words)[WordCount]) {
+#pragma unroll
+    for (int i = 0; i < WordCount; ++i)
+        words[i] = 0;
+}
+
+template <int WordCount>
+__device__ inline void xor_row_into(std::uint64_t (&current)[WordCount],
+                                    const std::uint64_t* __restrict__ row_words,
+                                    const std::uint32_t row) {
+    const std::uint64_t* src =
+        row_words + static_cast<std::size_t>(row) * static_cast<std::size_t>(WordCount);
+
+#pragma unroll
+    for (int i = 0; i < WordCount; ++i)
+        current[i] ^= src[i];
+}
+
+template <int WordCount>
+__device__ inline std::uint32_t popcount_words(const std::uint64_t (&words)[WordCount]) {
+    std::uint32_t total = 0;
+
+#pragma unroll
+    for (int i = 0; i < WordCount; ++i) {
+        total += static_cast<std::uint32_t>(__popcll(static_cast<unsigned long long>(words[i])));
+    }
+
+    return total;
+}
+
+template <int WordCount>
+__global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ row_words,
+                                             const std::uint32_t rows,
+                                             const std::uint32_t chunk_bits,
+                                             const std::uint64_t prefix_count,
+                                             const std::uint32_t k,
+                                             DeviceTopKEntry* __restrict__ block_results) {
+    constexpr int KStatic = kMaxCandidates;
+    const int kk = min(static_cast<int>(k), KStatic);
+
+    DeviceTopKEntry local_best[KStatic];
+    int local_size = 0;
+
+    std::uint64_t current[WordCount];
+
+    const std::uint32_t high_bits = rows - chunk_bits;
+    const std::uint64_t low_states = std::uint64_t{1} << chunk_bits;
+
+    const std::uint64_t first_prefix =
+        static_cast<std::uint64_t>(blockIdx.x) * static_cast<std::uint64_t>(blockDim.x) +
+        static_cast<std::uint64_t>(threadIdx.x);
+    const std::uint64_t prefix_stride =
+        static_cast<std::uint64_t>(gridDim.x) * static_cast<std::uint64_t>(blockDim.x);
+
+    for (std::uint64_t prefix = first_prefix; prefix < prefix_count; prefix += prefix_stride) {
+        zero_words<WordCount>(current);
+
+        for (std::uint32_t high = 0; high < high_bits; ++high) {
+            if (((prefix >> high) & std::uint64_t{1}) != 0)
+                xor_row_into<WordCount>(current, row_words, chunk_bits + high);
+        }
+
+        std::uint64_t current_mask = prefix << chunk_bits;
+        if (current_mask != 0) {
+            insert_topk_runtime(local_best,
+                                local_size,
+                                kk,
+                                DeviceTopKEntry{current_mask, popcount_words<WordCount>(current)});
+        }
+
+        for (std::uint64_t step = 1; step < low_states; ++step) {
+            const std::uint32_t bit = static_cast<std::uint32_t>(ctz64_device(step));
+
+            xor_row_into<WordCount>(current, row_words, bit);
+            current_mask ^= (std::uint64_t{1} << bit);
+
+            insert_topk_runtime(local_best,
+                                local_size,
+                                kk,
+                                DeviceTopKEntry{current_mask, popcount_words<WordCount>(current)});
+        }
+    }
+
+    __shared__ DeviceTopKEntry shared_best[KStatic];
+    __shared__ DeviceTopKEntry thread_stage[kThreadsPerBlock];
+    __shared__ int shared_best_size;
+
+    if (threadIdx.x == 0)
+        shared_best_size = 0;
+    __syncthreads();
+
+    for (int round = 0; round < kk; ++round) {
+        DeviceTopKEntry staged{0, 0};
+        if (round < local_size)
+            staged = local_best[round];
+
+        thread_stage[threadIdx.x] = staged;
+        __syncthreads();
+
+        if (threadIdx.x == 0) {
+            int merged_size = shared_best_size;
+
+            for (int tid = 0; tid < blockDim.x; ++tid)
+                insert_topk_runtime(shared_best, merged_size, kk, thread_stage[tid]);
+
+            shared_best_size = merged_size;
+        }
+
+        __syncthreads();
+    }
+
+    const std::size_t out_base =
+        static_cast<std::size_t>(blockIdx.x) * static_cast<std::size_t>(kk);
+
+    for (std::uint32_t i = static_cast<std::uint32_t>(threadIdx.x);
+         i < static_cast<std::uint32_t>(kk);
+         i += static_cast<std::uint32_t>(blockDim.x)) {
+        if (i < static_cast<std::uint32_t>(shared_best_size))
+            block_results[out_base + i] = shared_best[i];
+        else
+            block_results[out_base + i] = DeviceTopKEntry{0, 0};
+    }
+}
+
 BruteforceDeviceWorkspace& get_workspace() {
     thread_local BruteforceDeviceWorkspace workspace;
 
@@ -144,7 +296,7 @@ std::vector<CudaBruteforceResult> run_cuda_bruteforce_search(const CudaBruteforc
     BruteforceDeviceWorkspace& workspace = get_workspace();
     upload_plan(plan, workspace);
 
-    ensure_result_buffers(workspace.results, max_candidates, max_candidates);
+    ensure_result_buffers(workspace.results, kThreadsPerBlock * max_candidates, max_candidates);
 
     (void)prefix_count;
 
