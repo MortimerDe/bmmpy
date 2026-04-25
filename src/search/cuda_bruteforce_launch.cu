@@ -21,11 +21,16 @@ using cuda_launch_detail::ensure_result_buffers;
 using cuda_launch_detail::kMaxCandidates;
 
 constexpr int kThreadsPerBlock = 256;
+constexpr int kWarpSize = 32;
+constexpr int kWarpCount = kThreadsPerBlock / kWarpSize;
 constexpr std::size_t kAutoChunkBits = 12;
 constexpr std::size_t kSupportedWordsPerRow512 = 8;
 constexpr std::size_t kSupportedWordsPerRow1024 = 16;
 constexpr std::size_t kMaxRows = 64;
 constexpr std::size_t kMaskBits = 64;
+
+static_assert(kThreadsPerBlock % kWarpSize == 0,
+              "kThreadsPerBlock must be a multiple of warp size");
 
 struct BruteforceDeviceWorkspace {
     int device = -1;
@@ -109,34 +114,16 @@ insert_topk_runtime(DeviceTopKEntry* best, int& size, const int k, const DeviceT
     }
 }
 
-template <int WordCount> __device__ inline void zero_words(std::uint64_t (&words)[WordCount]) {
+__device__ inline std::uint32_t warp_sum_u32(std::uint32_t value) {
 #pragma unroll
-    for (int i = 0; i < WordCount; ++i)
-        words[i] = 0;
+    for (int offset = kWarpSize / 2; offset > 0; offset >>= 1)
+        value += __shfl_down_sync(0xffffffffu, value, offset);
+
+    return value;
 }
 
-template <int WordCount>
-__device__ inline void xor_row_into(std::uint64_t (&current)[WordCount],
-                                    const std::uint64_t* __restrict__ row_words,
-                                    const std::uint32_t row) {
-    const std::uint64_t* src =
-        row_words + static_cast<std::size_t>(row) * static_cast<std::size_t>(WordCount);
-
-#pragma unroll
-    for (int i = 0; i < WordCount; ++i)
-        current[i] ^= src[i];
-}
-
-template <int WordCount>
-__device__ inline std::uint32_t popcount_words(const std::uint64_t (&words)[WordCount]) {
-    std::uint32_t total = 0;
-
-#pragma unroll
-    for (int i = 0; i < WordCount; ++i) {
-        total += static_cast<std::uint32_t>(__popcll(static_cast<unsigned long long>(words[i])));
-    }
-
-    return total;
+template <int WordCount> std::size_t kernel_dynamic_shared_bytes(const std::size_t rows) {
+    return rows * static_cast<std::size_t>(WordCount) * sizeof(std::uint64_t);
 }
 
 template <int WordCount>
@@ -147,78 +134,109 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
                                              const std::uint32_t k,
                                              DeviceTopKEntry* __restrict__ block_results) {
     constexpr int KStatic = kMaxCandidates;
-    const int kk = min(static_cast<int>(k), KStatic);
+    const int kk = k < static_cast<std::uint32_t>(KStatic) ? static_cast<int>(k) : KStatic;
 
-    DeviceTopKEntry local_best[KStatic];
-    int local_size = 0;
+    const int warp_id = static_cast<int>(threadIdx.x) / kWarpSize;
+    const int lane_id = static_cast<int>(threadIdx.x) % kWarpSize;
+    const bool lane_active = lane_id < WordCount;
 
-    std::uint64_t current[WordCount];
+    extern __shared__ std::uint64_t shared_rows[];
+
+    __shared__ DeviceTopKEntry shared_best[KStatic];
+    __shared__ int shared_best_size;
+    __shared__ DeviceTopKEntry warp_best[kWarpCount][KStatic];
+    __shared__ int warp_best_size[kWarpCount];
+
+    const std::size_t staged_word_count =
+        static_cast<std::size_t>(rows) * static_cast<std::size_t>(WordCount);
+
+    for (std::size_t idx = static_cast<std::size_t>(threadIdx.x); idx < staged_word_count;
+         idx += static_cast<std::size_t>(blockDim.x)) {
+        shared_rows[idx] = row_words[idx];
+    }
+
+    if (lane_id == 0)
+        warp_best_size[warp_id] = 0;
+    if (threadIdx.x == 0)
+        shared_best_size = 0;
+    __syncthreads();
 
     const std::uint32_t high_bits = rows - chunk_bits;
     const std::uint64_t low_states = std::uint64_t{1} << chunk_bits;
 
     const std::uint64_t first_prefix =
-        static_cast<std::uint64_t>(blockIdx.x) * static_cast<std::uint64_t>(blockDim.x) +
-        static_cast<std::uint64_t>(threadIdx.x);
+        static_cast<std::uint64_t>(blockIdx.x) * static_cast<std::uint64_t>(kWarpCount) +
+        static_cast<std::uint64_t>(warp_id);
     const std::uint64_t prefix_stride =
-        static_cast<std::uint64_t>(gridDim.x) * static_cast<std::uint64_t>(blockDim.x);
+        static_cast<std::uint64_t>(gridDim.x) * static_cast<std::uint64_t>(kWarpCount);
 
     for (std::uint64_t prefix = first_prefix; prefix < prefix_count; prefix += prefix_stride) {
-        zero_words<WordCount>(current);
+        std::uint64_t current_word = 0;
 
-        for (std::uint32_t high = 0; high < high_bits; ++high) {
-            if (((prefix >> high) & std::uint64_t{1}) != 0)
-                xor_row_into<WordCount>(current, row_words, chunk_bits + high);
+        if (lane_active) {
+            for (std::uint32_t high = 0; high < high_bits; ++high) {
+                if (((prefix >> high) & std::uint64_t{1}) == 0)
+                    continue;
+
+                current_word ^= shared_rows[(static_cast<std::size_t>(chunk_bits + high) *
+                                             static_cast<std::size_t>(WordCount)) +
+                                            static_cast<std::size_t>(lane_id)];
+            }
         }
 
         std::uint64_t current_mask = prefix << chunk_bits;
-        if (current_mask != 0) {
-            insert_topk_runtime(local_best,
-                                local_size,
+
+        std::uint32_t lane_popcount =
+            lane_active ? static_cast<std::uint32_t>(
+                              __popcll(static_cast<unsigned long long>(current_word)))
+                        : 0u;
+        std::uint32_t total_popcount = warp_sum_u32(lane_popcount);
+
+        if (lane_id == 0 && current_mask != 0) {
+            insert_topk_runtime(warp_best[warp_id],
+                                warp_best_size[warp_id],
                                 kk,
-                                DeviceTopKEntry{current_mask, popcount_words<WordCount>(current)});
+                                DeviceTopKEntry{current_mask, total_popcount});
         }
 
         for (std::uint64_t step = 1; step < low_states; ++step) {
             const std::uint32_t bit = static_cast<std::uint32_t>(ctz64_device(step));
 
-            xor_row_into<WordCount>(current, row_words, bit);
+            if (lane_active) {
+                current_word ^= shared_rows[(static_cast<std::size_t>(bit) *
+                                             static_cast<std::size_t>(WordCount)) +
+                                            static_cast<std::size_t>(lane_id)];
+            }
             current_mask ^= (std::uint64_t{1} << bit);
 
-            insert_topk_runtime(local_best,
-                                local_size,
-                                kk,
-                                DeviceTopKEntry{current_mask, popcount_words<WordCount>(current)});
+            lane_popcount = lane_active ? static_cast<std::uint32_t>(__popcll(
+                                              static_cast<unsigned long long>(current_word)))
+                                        : 0u;
+            total_popcount = warp_sum_u32(lane_popcount);
+
+            if (lane_id == 0) {
+                insert_topk_runtime(warp_best[warp_id],
+                                    warp_best_size[warp_id],
+                                    kk,
+                                    DeviceTopKEntry{current_mask, total_popcount});
+            }
         }
     }
 
-    __shared__ DeviceTopKEntry shared_best[KStatic];
-    __shared__ DeviceTopKEntry thread_stage[kThreadsPerBlock];
-    __shared__ int shared_best_size;
-
-    if (threadIdx.x == 0)
-        shared_best_size = 0;
     __syncthreads();
 
-    for (int round = 0; round < kk; ++round) {
-        DeviceTopKEntry staged{0, 0};
-        if (round < local_size)
-            staged = local_best[round];
+    if (threadIdx.x == 0) {
+        int merged_size = 0;
 
-        thread_stage[threadIdx.x] = staged;
-        __syncthreads();
-
-        if (threadIdx.x == 0) {
-            int merged_size = shared_best_size;
-
-            for (int tid = 0; tid < blockDim.x; ++tid)
-                insert_topk_runtime(shared_best, merged_size, kk, thread_stage[tid]);
-
-            shared_best_size = merged_size;
+        for (int warp = 0; warp < kWarpCount; ++warp) {
+            for (int i = 0; i < warp_best_size[warp]; ++i)
+                insert_topk_runtime(shared_best, merged_size, kk, warp_best[warp][i]);
         }
 
-        __syncthreads();
+        shared_best_size = merged_size;
     }
+
+    __syncthreads();
 
     const std::size_t out_base =
         static_cast<std::size_t>(blockIdx.x) * static_cast<std::size_t>(kk);
@@ -233,7 +251,9 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
     }
 }
 
-template <int WordCount> std::size_t recommend_persistent_blocks(const std::uint64_t prefix_count) {
+template <int WordCount>
+std::size_t recommend_persistent_blocks(const std::uint64_t prefix_count,
+                                        const std::size_t shared_bytes) {
     int device = 0;
     check_cuda(cudaGetDevice(&device), "cudaGetDevice");
 
@@ -242,13 +262,15 @@ template <int WordCount> std::size_t recommend_persistent_blocks(const std::uint
 
     int active_blocks_per_sm = 0;
     check_cuda(
-        cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &active_blocks_per_sm, bruteforce_persistent_kernel<WordCount>, kThreadsPerBlock, 0),
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&active_blocks_per_sm,
+                                                      bruteforce_persistent_kernel<WordCount>,
+                                                      kThreadsPerBlock,
+                                                      static_cast<int>(shared_bytes)),
         "cudaOccupancyMaxActiveBlocksPerMultiprocessor");
 
     const std::uint64_t required_blocks =
-        (prefix_count + static_cast<std::uint64_t>(kThreadsPerBlock) - 1) /
-        static_cast<std::uint64_t>(kThreadsPerBlock);
+        (prefix_count + static_cast<std::uint64_t>(kWarpCount) - 1) /
+        static_cast<std::uint64_t>(kWarpCount);
 
     const std::uint64_t desired_blocks =
         static_cast<std::uint64_t>(std::max(prop.multiProcessorCount, 1)) *
@@ -266,12 +288,14 @@ void launch_bruteforce_kernel(BruteforceDeviceWorkspace& workspace,
                               const std::size_t chunk_bits,
                               const std::uint64_t prefix_count,
                               const std::size_t k) {
-    const std::size_t persistent_blocks = recommend_persistent_blocks<WordCount>(prefix_count);
+    const std::size_t shared_bytes = kernel_dynamic_shared_bytes<WordCount>(rows);
+    const std::size_t persistent_blocks =
+        recommend_persistent_blocks<WordCount>(prefix_count, shared_bytes);
 
     ensure_result_buffers(workspace.results, persistent_blocks * k, k);
 
     bruteforce_persistent_kernel<WordCount>
-        <<<static_cast<unsigned int>(persistent_blocks), kThreadsPerBlock>>>(
+        <<<static_cast<unsigned int>(persistent_blocks), kThreadsPerBlock, shared_bytes>>>(
             workspace.d_row_words,
             static_cast<std::uint32_t>(rows),
             static_cast<std::uint32_t>(chunk_bits),
