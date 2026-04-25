@@ -5,7 +5,7 @@ PIP ?= $(PYTHON) -m pip
 CMAKE ?= cmake
 CTEST ?= ctest
 
-ENABLE_CUDA ?= OFF
+ENABLE_CUDA ?= ON
 CIBW_BUILD ?= cp312-*
 DIST_DIR ?= dist
 VERSION ?=

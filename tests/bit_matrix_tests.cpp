@@ -393,6 +393,21 @@ void test_binary_io_exceptions() {
     }
 }
 
+void test_row_window_total_weight() {
+    BitMatrix source = matrix_from_rows({
+        "10101",
+        "00101",
+        "00010",
+    });
+
+    const auto window = source.row_window({0, 1, 2});
+
+    require(window.row_popcount(0) == 3, "row window row_popcount(0) mismatch");
+    require(window.row_popcount(1) == 2, "row window row_popcount(1) mismatch");
+    require(window.row_popcount(2) == 1, "row window row_popcount(2) mismatch");
+    require(window.total_weight() == 4, "row window total_weight mismatch");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -414,6 +429,8 @@ int main() {
         {"text_io_exceptions", &test_text_io_exceptions},
         {"binary_io_exceptions", &test_binary_io_exceptions},
         {"row_window_view", &test_row_window_view},
+        {"row_window_view", &test_row_window_view},
+        {"row_window_total_weight", &test_row_window_total_weight},
     };
 
     for (const TestCase& test : tests) {
