@@ -8,6 +8,7 @@
 #include "bmmpy/search/split_window_prep.hpp"
 #include "bmmpy/stub.hpp"
 
+#include <bmmpy/search/cuda_bruteforce_search.hpp>
 #include <bmmpy/search/mitm_fwht_search.hpp>
 #include <cstdint>
 #include <initializer_list>
@@ -508,6 +509,70 @@ void test_bruteforce_searcher_interface_dispatch() {
     require_same_candidates(actual, expected, "bruteforce searcher dispatch");
 }
 
+void test_cuda_bruteforce_validates_window_size() {
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix(15, 512);
+
+    std::vector<std::size_t> rows(15);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::CudaBruteforceSearch search;
+    expect_invalid_argument([&] { (void)search.search(window); },
+                            "cuda bruteforce searcher window size");
+}
+
+void test_cuda_bruteforce_validates_supported_width() {
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix(16, 256);
+
+    std::vector<std::size_t> rows(16);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::CudaBruteforceSearch search;
+    expect_invalid_argument([&] { (void)search.search(window); },
+                            "cuda bruteforce searcher supported width");
+}
+
+void test_cuda_bruteforce_matches_cpu_bruteforce_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
+
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix(16, 512);
+
+    std::vector<std::size_t> rows(16);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::BruteforceSearch cpu(bmmpy::BruteforceSearchConfig{8, 0});
+    bmmpy::CudaBruteforceSearch gpu(bmmpy::CudaBruteforceSearchConfig{8, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_bruteforce matches cpu bruteforce");
+}
+
+void test_cuda_bruteforce_supports_128_candidates_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
+
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix(16, 1024);
+
+    std::vector<std::size_t> rows(16);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::BruteforceSearch cpu(bmmpy::BruteforceSearchConfig{128, 0});
+    bmmpy::CudaBruteforceSearch gpu(bmmpy::CudaBruteforceSearchConfig{128, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_bruteforce supports 128 candidates");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -545,6 +610,13 @@ int main() {
         {"bruteforce_searcher_interface_dispatch", &test_bruteforce_searcher_interface_dispatch},
         {"bruteforce_search_respects_k", &test_bruteforce_search_respects_k},
         {"bruteforce_search_matches_fwht_search", &test_bruteforce_search_matches_fwht_search},
+        {"cuda_bruteforce_validates_window_size", &test_cuda_bruteforce_validates_window_size},
+        {"cuda_bruteforce_validates_supported_width",
+         &test_cuda_bruteforce_validates_supported_width},
+        {"cuda_bruteforce_matches_cpu_bruteforce_when_available",
+         &test_cuda_bruteforce_matches_cpu_bruteforce_when_available},
+        {"cuda_bruteforce_supports_128_candidates_when_available",
+         &test_cuda_bruteforce_supports_128_candidates_when_available},
     };
 
     for (const TestCase& test : tests) {

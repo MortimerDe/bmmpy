@@ -1,7 +1,9 @@
+#include "bmmpy/search/cuda_launch_result_buffers.cuh"
+#include "bmmpy/search/cuda_launch_runtime.cuh"
+#include "bmmpy/search/cuda_launch_topk.cuh"
 #include "bmmpy/search/cuda_mitm_fwht_launch.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <cuda_runtime.h>
 #include <limits>
@@ -11,7 +13,14 @@
 namespace bmmpy {
 namespace {
 
-constexpr int kMaxCandidates = 128;
+using cuda_launch_detail::check_cuda;
+using cuda_launch_detail::DeviceResultBuffers;
+using cuda_launch_detail::DeviceTopKEntry;
+using cuda_launch_detail::ensure_buffer;
+using cuda_launch_detail::ensure_result_buffers;
+using cuda_launch_detail::insert_topk;
+using cuda_launch_detail::kMaxCandidates;
+
 constexpr int kThreadsPerBlock = 256;
 constexpr int kWarpSize = 32;
 constexpr int kWarpCount = kThreadsPerBlock / kWarpSize;
@@ -19,11 +28,6 @@ constexpr std::size_t kMaxSpecializedLowBits = 15;
 
 static_assert(kThreadsPerBlock % kWarpSize == 0,
               "kThreadsPerBlock must be a multiple of warp size");
-
-struct DeviceTopKEntry {
-    std::uint64_t mask;
-    std::uint32_t weight;
-};
 
 struct HostGroupedPlan {
     std::size_t low_bits = 0;
@@ -35,23 +39,20 @@ struct HostGroupedPlan {
     std::vector<std::uint16_t> multiplicity;
 };
 
-struct DeviceWorkspace {
+struct MitmDeviceWorkspace {
     int device = -1;
 
     std::uint32_t* d_r_offsets = nullptr;
     std::uint64_t* d_q = nullptr;
     std::uint16_t* d_multiplicity = nullptr;
 
-    DeviceTopKEntry* d_block_results = nullptr;
-    DeviceTopKEntry* d_out_results = nullptr;
-
     std::size_t r_offsets_capacity = 0;
     std::size_t q_capacity = 0;
     std::size_t multiplicity_capacity = 0;
-    std::size_t block_results_capacity = 0;
-    std::size_t out_results_capacity = 0;
 
-    ~DeviceWorkspace() { reset(); }
+    DeviceResultBuffers results;
+
+    ~MitmDeviceWorkspace() { reset(); }
 
     void reset() noexcept {
         if (d_r_offsets != nullptr)
@@ -60,54 +61,19 @@ struct DeviceWorkspace {
             (void)cudaFree(d_q);
         if (d_multiplicity != nullptr)
             (void)cudaFree(d_multiplicity);
-        if (d_block_results != nullptr)
-            (void)cudaFree(d_block_results);
-        if (d_out_results != nullptr)
-            (void)cudaFree(d_out_results);
 
         d_r_offsets = nullptr;
         d_q = nullptr;
         d_multiplicity = nullptr;
-        d_block_results = nullptr;
-        d_out_results = nullptr;
 
         r_offsets_capacity = 0;
         q_capacity = 0;
         multiplicity_capacity = 0;
-        block_results_capacity = 0;
-        out_results_capacity = 0;
+
+        results.reset();
         device = -1;
     }
 };
-
-__host__ __device__ inline bool candidate_less(const DeviceTopKEntry& lhs,
-                                               const DeviceTopKEntry& rhs) noexcept {
-    return lhs.weight < rhs.weight || (lhs.weight == rhs.weight && lhs.mask < rhs.mask);
-}
-
-template <int K>
-__device__ inline void
-insert_topk(DeviceTopKEntry (&best)[K], int& size, const DeviceTopKEntry incoming) {
-    if (incoming.mask == 0)
-        return;
-
-    if (size < K) {
-        best[size++] = incoming;
-    } else if (!candidate_less(incoming, best[size - 1])) {
-        return;
-    } else {
-        best[size - 1] = incoming;
-    }
-
-    for (int i = size - 1; i > 0; --i) {
-        if (!candidate_less(best[i], best[i - 1]))
-            break;
-
-        const DeviceTopKEntry tmp = best[i - 1];
-        best[i - 1] = best[i];
-        best[i] = tmp;
-    }
-}
 
 __device__ inline int parity64(const std::uint64_t value) {
     return static_cast<int>(__popcll(static_cast<unsigned long long>(value)) & 1ull);
@@ -253,65 +219,6 @@ __global__ void sweep_persistent_kernel(const std::uint32_t* __restrict__ r_offs
     }
 }
 
-__global__ void merge_kernel(const DeviceTopKEntry* block_results,
-                             const std::size_t block_count,
-                             const std::size_t k,
-                             DeviceTopKEntry* out_results) {
-    if (threadIdx.x != 0 || blockIdx.x != 0)
-        return;
-
-    constexpr int KStatic = kMaxCandidates;
-    DeviceTopKEntry best[KStatic];
-    int size = 0;
-    const std::size_t kk = min(k, static_cast<std::size_t>(KStatic));
-
-    for (std::size_t block = 0; block < block_count; ++block) {
-        const std::size_t base = block * kk;
-        for (std::size_t i = 0; i < kk; ++i)
-            insert_topk<KStatic>(best, size, block_results[base + i]);
-    }
-
-    for (std::size_t i = 0; i < kk; ++i) {
-        if (i < static_cast<std::size_t>(size))
-            out_results[i] = best[i];
-        else
-            out_results[i] = DeviceTopKEntry{0, 0};
-    }
-}
-
-void check_cuda(const cudaError_t status, const char* context) {
-    if (status != cudaSuccess) {
-        throw std::runtime_error(std::string("CUDA error in ") + context + ": " +
-                                 cudaGetErrorString(status));
-    }
-}
-
-std::size_t next_capacity(const std::size_t current, const std::size_t required) {
-    if (current >= required)
-        return current;
-
-    std::size_t capacity = current == 0 ? 256 : current;
-    while (capacity < required) {
-        if (capacity > std::numeric_limits<std::size_t>::max() / 2)
-            return required;
-        capacity *= 2;
-    }
-    return capacity;
-}
-
-template <typename T>
-void ensure_buffer(T*& ptr, std::size_t& capacity, const std::size_t required, const char* label) {
-    if (required <= capacity)
-        return;
-
-    if (ptr != nullptr)
-        check_cuda(cudaFree(ptr), "cudaFree(realloc)");
-
-    const std::size_t new_capacity = next_capacity(capacity, required);
-    check_cuda(cudaMalloc(reinterpret_cast<void**>(&ptr), new_capacity * sizeof(T)), label);
-    capacity = new_capacity;
-}
-
 std::size_t dynamic_shared_limit_bytes() {
     int device = 0;
     check_cuda(cudaGetDevice(&device), "cudaGetDevice");
@@ -422,7 +329,7 @@ std::size_t recommend_persistent_blocks(const std::uint64_t high_state_count,
 
 template <int LowBits>
 void launch_sweep_kernel(const HostGroupedPlan& plan,
-                         DeviceWorkspace& workspace,
+                         MitmDeviceWorkspace& workspace,
                          const std::size_t k,
                          const std::uint64_t high_state_count) {
     const std::size_t shared_bytes = kernel_dynamic_shared_bytes<LowBits>();
@@ -431,12 +338,7 @@ void launch_sweep_kernel(const HostGroupedPlan& plan,
     const std::size_t persistent_blocks =
         recommend_persistent_blocks<LowBits>(high_state_count, shared_bytes);
 
-    ensure_buffer(workspace.d_block_results,
-                  workspace.block_results_capacity,
-                  persistent_blocks * k,
-                  "cudaMalloc(block_results)");
-    ensure_buffer(
-        workspace.d_out_results, workspace.out_results_capacity, k, "cudaMalloc(out_results)");
+    ensure_result_buffers(workspace.results, persistent_blocks * k, k);
 
     sweep_persistent_kernel<LowBits>
         <<<static_cast<unsigned int>(persistent_blocks), kThreadsPerBlock, shared_bytes>>>(
@@ -446,16 +348,16 @@ void launch_sweep_kernel(const HostGroupedPlan& plan,
             high_state_count,
             plan.total_weight,
             static_cast<std::uint32_t>(k),
-            workspace.d_block_results);
+            workspace.results.d_block_results);
     check_cuda(cudaGetLastError(), "sweep_persistent_kernel launch");
 
-    merge_kernel<<<1, 1>>>(
-        workspace.d_block_results, persistent_blocks, k, workspace.d_out_results);
-    check_cuda(cudaGetLastError(), "merge_kernel launch");
+    cuda_launch_detail::merge_topk_kernel<<<1, 1>>>(
+        workspace.results.d_block_results, persistent_blocks, k, workspace.results.d_out_results);
+    check_cuda(cudaGetLastError(), "merge_topk_kernel launch");
 }
 
 void dispatch_sweep_kernel(const HostGroupedPlan& plan,
-                           DeviceWorkspace& workspace,
+                           MitmDeviceWorkspace& workspace,
                            const std::size_t k) {
     const std::uint64_t high_state_count = std::uint64_t{1} << plan.high_bits;
 
@@ -511,8 +413,8 @@ void dispatch_sweep_kernel(const HostGroupedPlan& plan,
     }
 }
 
-DeviceWorkspace& get_workspace() {
-    thread_local DeviceWorkspace workspace;
+MitmDeviceWorkspace& get_workspace() {
+    thread_local MitmDeviceWorkspace workspace;
     int current_device = 0;
     check_cuda(cudaGetDevice(&current_device), "cudaGetDevice");
 
@@ -524,7 +426,7 @@ DeviceWorkspace& get_workspace() {
     return workspace;
 }
 
-void upload_plan(const HostGroupedPlan& plan, DeviceWorkspace& workspace) {
+void upload_plan(const HostGroupedPlan& plan, MitmDeviceWorkspace& workspace) {
     ensure_buffer(workspace.d_r_offsets,
                   workspace.r_offsets_capacity,
                   plan.r_offsets.size(),
@@ -569,7 +471,7 @@ std::vector<CudaMitmFwhtResult> run_cuda_mitm_fwht_search(const CompactSplitWind
     }
 
     const HostGroupedPlan plan = build_grouped_plan(prep);
-    DeviceWorkspace& workspace = get_workspace();
+    MitmDeviceWorkspace& workspace = get_workspace();
     upload_plan(plan, workspace);
 
     dispatch_sweep_kernel(plan, workspace, max_candidates);
@@ -577,7 +479,7 @@ std::vector<CudaMitmFwhtResult> run_cuda_mitm_fwht_search(const CompactSplitWind
 
     std::vector<DeviceTopKEntry> host_out(max_candidates);
     check_cuda(cudaMemcpy(host_out.data(),
-                          workspace.d_out_results,
+                          workspace.results.d_out_results,
                           max_candidates * sizeof(DeviceTopKEntry),
                           cudaMemcpyDeviceToHost),
                "cudaMemcpy(out_results)");

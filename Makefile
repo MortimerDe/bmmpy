@@ -30,14 +30,21 @@ build: configure ## Build native targets
 cli: build ## Run the CLI executable
 	./$(BUILD_DIR)/cli
 
-dev: ## Install editable Python package
+dev: ## Install editable Python package.
 	CMAKE_ARGS="$(CMAKE_ARGS)" $(PIP) install -e .
 
 test: build ## Run C++ tests
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
 
-test-py: ## Run Python API tests (run 'make dev' first)
-	$(PYTHON) -m unittest discover -s tests -p 'python_api_tests.py'
+test-py: ## Run Python API tests (repeat ENABLE_CUDA here if the editable install was built with CUDA)
+	$(MAKE) dev
+	BMMPY_EXPECT_CUDA_COMPILED=$(ENABLE_CUDA) \
+	$(PYTHON) -m pytest tests/python_api_tests.py -v
+
+test-py-cuda: ## Reinstall editable package with CUDA and run Python API tests
+	$(MAKE) dev ENABLE_CUDA=ON
+	BMMPY_EXPECT_CUDA_COMPILED=ON \
+	$(PYTHON) -m pytest tests/python_api_tests.py -v
 
 stubs: configure ## Generate Python stubs
 	$(CMAKE) --build $(BUILD_DIR) --target bmmpy_stub
