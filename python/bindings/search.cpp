@@ -1,6 +1,7 @@
 #include "bindings.hpp"
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/search/bruteforce_search.hpp"
+#include "bmmpy/search/cuda_bruteforce_search.hpp"
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/mitm_fwht_search.hpp"
@@ -57,6 +58,16 @@ void bind_search(nb::module_& m) {
              nb::arg("config") = ::bmmpy::CudaMitmFwhtSearchConfig{})
         .def("name", &::bmmpy::CudaMitmFwhtSearch::name)
         .def("search", &::bmmpy::CudaMitmFwhtSearch::search, nb::arg("window"));
+
+    nb::class_<::bmmpy::CudaBruteforceSearchConfig>(m, "CudaBruteforceSearchConfig")
+        .def(nb::init<>())
+        .def_rw("max_candidates", &::bmmpy::CudaBruteforceSearchConfig::max_candidates)
+        .def_rw("chunk_bits", &::bmmpy::CudaBruteforceSearchConfig::chunk_bits);
+    nb::class_<::bmmpy::CudaBruteforceSearch>(m, "CudaBruteforceSearch")
+        .def(nb::init<::bmmpy::CudaBruteforceSearchConfig>(),
+             nb::arg("config") = ::bmmpy::CudaBruteforceSearchConfig{})
+        .def("name", &::bmmpy::CudaBruteforceSearch::name)
+        .def("search", &::bmmpy::CudaBruteforceSearch::search, nb::arg("window"));
 }
 
 } // namespace bmmpy::bindings
