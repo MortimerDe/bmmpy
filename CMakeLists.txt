@@ -54,6 +54,9 @@ target_sources(
         src/search/split_window_prep.cpp
         src/search/cuda_mitm_fwht_search.cpp
         src/search/bruteforce_search.cpp
+        src/search/cuda_mitm_fwht_search.cpp
+        src/search/bruteforce_search.cpp
+        src/search/cuda_bruteforce_search.cpp
 )
 
 target_include_directories(
@@ -127,6 +130,7 @@ if(BMMPY_ENABLE_CUDA)
         bmmpy_core
         PRIVATE
             src/search/cuda_mitm_fwht_launch.cu
+            src/search/cuda_bruteforce_launch.cu
     )
 
     if(BMMPY_CUDA_STATIC_RUNTIME)

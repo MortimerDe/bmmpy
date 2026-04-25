@@ -24,6 +24,8 @@ from ._bmmpy import (
     RowWindow,
     BruteforceSearch as _NativeBruteforceSearch,
     BruteforceSearchConfig as _NativeBruteforceSearchConfig,
+    CudaBruteforceSearch as _NativeCudaBruteforceSearch,
+    CudaBruteforceSearchConfig as _NativeCudaBruteforceSearchConfig,
     CudaMitmFwhtSearch as _NativeCudaMitmFwhtSearch,
     CudaMitmFwhtSearchConfig as _NativeCudaMitmFwhtSearchConfig,
     FwhtSearch as _NativeFwhtSearch,
@@ -344,4 +346,53 @@ class CudaMitmFwhtSearch:
     def search(self, window: RowWindow) -> list[Candidate]:
         return self._impl.search(window)
 
-__all__ = ["BruteforceSearch", "FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch"]
+class CudaBruteforceSearch:
+    """
+    Search for low-weight row combinations using the CUDA exact brute-force backend.
+
+    Parameters
+    ----------
+    max_candidates : int, default=64
+        Maximum number of candidates to return.
+    chunk_bits : int, default=0
+        Width of the Gray-swept low chunk. A value of 0 selects the native auto mode.
+
+    Notes
+    -----
+    This searcher targets GPU execution for narrow matrices in the current CUDA
+    brute-force path. The native implementation validates GPU-compatible windows
+    and dispatches to the CUDA backend when available.
+
+    See Also
+    --------
+    BruteforceSearch
+        CPU exact brute-force searcher for narrow matrices.
+    CudaMitmFwhtSearch
+        CUDA split-FWHT backend for larger-window GPU search.
+    """
+
+    __slots__ = ("max_candidates", "chunk_bits", "_impl")
+
+    def __init__(self, *, max_candidates: int = 64, chunk_bits: int = 0) -> None:
+        config = _NativeCudaBruteforceSearchConfig()
+        config.max_candidates = max_candidates
+        config.chunk_bits = chunk_bits
+
+        self.max_candidates = max_candidates
+        self.chunk_bits = chunk_bits
+        self._impl = _NativeCudaBruteforceSearch(config)
+
+    def __repr__(self) -> str:
+        return (
+            "CudaBruteforceSearch("
+            f"max_candidates={self.max_candidates}, "
+            f"chunk_bits={self.chunk_bits})"
+        )
+
+    def name(self) -> str:
+        return self._impl.name()
+
+    def search(self, window: RowWindow) -> list[Candidate]:
+        return self._impl.search(window)
+
+__all__ = ["BruteforceSearch", "FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch", "CudaBruteforceSearch"]

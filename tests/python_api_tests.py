@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import unittest
-
+import pytest
+import os
 import bmmpy as bmm
 
 def make_search_matrix() -> bmm.BitMatrix:
@@ -9,6 +10,18 @@ def make_search_matrix() -> bmm.BitMatrix:
     for col in (0, 2, 4):
         matrix[0, col] = True
         matrix[1, col] = True
+    return matrix
+
+def make_cuda_equivalence_matrix(rows: int = 16, cols: int = 512, seed: int = 42) -> bmm.BitMatrix:
+    import random
+    rng = random.Random(seed)
+    matrix = bmm.BitMatrix(rows, cols)
+
+    for row in range(rows):
+        for col in range(cols):
+            if rng.getrandbits(1):
+                matrix[row, col] = True
+
     return matrix
 
 class PublicApiTests(unittest.TestCase):
@@ -28,6 +41,8 @@ class PublicApiTests(unittest.TestCase):
         self.assertFalse(hasattr(bmm, "get_mastrovito_matrix"))
         self.assertFalse(hasattr(bmm, "parse_poly"))
         self.assertFalse(hasattr(bmm, "find_row_transform"))
+        self.assertTrue(hasattr(bmm, "CudaBruteforceSearch"))
+        self.assertFalse(hasattr(bmm, "CudaBruteforceSearchConfig"))
 
     def test_bit_matrix_python_sugar(self) -> None:
         matrix = bmm.matrix_from_rows(["10", "01"])
@@ -206,6 +221,50 @@ class PublicApiTests(unittest.TestCase):
         self.assertEqual(
             [(candidate.mask_u64(), candidate.weight) for candidate in actual],
             [(candidate.mask_u64(), candidate.weight) for candidate in expected],
+        )
+    
+    def test_cuda_build_expectation_matches_runtime_features(self) -> None:
+        expected = os.environ.get("BMMPY_EXPECT_CUDA_COMPILED")
+        if expected is None:
+            return
+
+        normalized = expected.strip().upper()
+        self.assertIn(normalized, {"ON", "OFF"})
+
+        features = bmm.get_runtime_features()
+        expected_compiled = normalized == "ON"
+
+        self.assertEqual(
+            features.cuda_compiled,
+            expected_compiled,
+            (
+                f"Expected cuda_compiled={expected_compiled} from "
+                f"BMMPY_EXPECT_CUDA_COMPILED={normalized}, got {features.cuda_compiled}. "
+                "If you changed build flags, reinstall with the matching make target first."
+            ),
+        )
+
+    def test_cuda_bruteforce_search_wrapper_name(self) -> None:
+        searcher = bmm.CudaBruteforceSearch(max_candidates=8, chunk_bits=0)
+        self.assertEqual(searcher.name(), "cuda_bruteforce")
+    
+    def test_cuda_bruteforce_search_wrapper_runtime_behavior(self) -> None:
+        features = bmm.get_runtime_features()
+
+        if not features.cuda_compiled:
+            pytest.skip("CUDA not compiled into this build")
+
+        if not features.cuda_available:
+            pytest.skip("no CUDA device available")
+
+        cpu = bmm.BruteforceSearch(max_candidates=8, chunk_bits=0)
+        gpu = bmm.CudaBruteforceSearch(max_candidates=8, chunk_bits=0)
+        matrix = make_cuda_equivalence_matrix(rows=16, cols=512)
+        window = matrix.row_window(list(range(16)))
+
+        self.assertEqual(
+            [(c.mask_u64(), c.weight) for c in gpu.search(window)],
+            [(c.mask_u64(), c.weight) for c in cpu.search(window)],
         )
 
 if __name__ == "__main__":

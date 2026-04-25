@@ -48,7 +48,7 @@ from ._bmmpy import (
 from .apply import GreedySelection
 from .candidate import Candidate
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
-from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch
+from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch, CudaBruteforceSearch
 from .workflows import search_apply
 
 __all__ = [
@@ -62,6 +62,7 @@ __all__ = [
     "MatrixError",
     "MitmFwhtSearch",
     "CudaMitmFwhtSearch",
+    "CudaBruteforceSearch",
     "RowWindow",
     "RuntimeFeatures",
     "add",
