@@ -20,7 +20,7 @@ public:
     const char* name() const noexcept override { return "cuda_mitm_fwht"; }
 
 private:
-    static constexpr std::size_t kMinRows = 28;
+    static constexpr std::size_t kMinRows = 16;
     static constexpr std::size_t kMaxRows = 64;
 
     CudaMitmFwhtSearchConfig _config;
