@@ -31,6 +31,8 @@ void bind_window(nb::module_& m) {
                          return nb::make_tuple(window.size(), window.cols());
                      })
         .def_prop_ro("rows", &::bmmpy::RowWindow::global_rows)
+        .def("row_popcount", &::bmmpy::RowWindow::row_popcount, nb::arg("local_row"))
+        .def_prop_ro("total_weight", &::bmmpy::RowWindow::total_weight)
         .def("materialize", &::bmmpy::RowWindow::materialize, nb::rv_policy::move);
 }
 

@@ -1,12 +1,27 @@
 #include "bmmpy/core/row_window.hpp"
 
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/detail/bit_ops.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
 namespace bmmpy {
+namespace {
+
+constexpr std::size_t kWordBits = std::numeric_limits<std::uint64_t>::digits;
+
+std::uint64_t tail_mask_for_cols(std::size_t cols) noexcept {
+    const std::size_t tail_bits = cols % kWordBits;
+    if (tail_bits == 0)
+        return ~std::uint64_t{0};
+
+    return (std::uint64_t{1} << tail_bits) - 1;
+}
+
+} // namespace
 
 RowWindow::RowWindow(BitMatrix& matrix, std::vector<std::size_t> rows)
     : _matrix(&matrix), _mutable_matrix(&matrix), _global_rows(std::move(rows)) {
@@ -40,6 +55,29 @@ const std::uint64_t* RowWindow::row_words(std::size_t local_row) const {
 
 std::uint64_t RowWindow::row_popcount(std::size_t local_row) const {
     return _matrix->row_popcount(global_row(local_row));
+}
+
+std::uint64_t RowWindow::total_weight() const {
+    const std::size_t word_count = words_per_row();
+    if (_row_ptrs.empty() || word_count == 0)
+        return 0;
+
+    const auto& bit_ops = detail::bit_ops();
+    const std::uint64_t tail_mask = tail_mask_for_cols(cols());
+
+    std::uint64_t total = 0;
+    for (std::size_t word_index = 0; word_index < word_count; ++word_index) {
+        std::uint64_t active = 0;
+        for (const std::uint64_t* row_words : _row_ptrs)
+            active |= row_words[word_index];
+
+        if (word_index + 1 == word_count)
+            active &= tail_mask;
+
+        total += bit_ops.row_popcount(&active, 1);
+    }
+
+    return total;
 }
 
 bool RowWindow::get(std::size_t local_row, std::size_t col) const {

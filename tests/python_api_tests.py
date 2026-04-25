@@ -266,6 +266,18 @@ class PublicApiTests(unittest.TestCase):
             [(c.mask_u64(), c.weight) for c in gpu.search(window)],
             [(c.mask_u64(), c.weight) for c in cpu.search(window)],
         )
+    def test_row_window_python_metadata(self) -> None:
+        matrix = bmm.matrix_from_rows([
+            "10101",
+            "00101",
+            "00010",
+        ])
+        window = matrix.row_window([0, 1, 2])
+
+        self.assertEqual(window.row_popcount(0), 3)
+        self.assertEqual(window.row_popcount(1), 2)
+        self.assertEqual(window.row_popcount(2), 1)
+        self.assertEqual(window.total_weight, 4)
 
 if __name__ == "__main__":
     unittest.main()

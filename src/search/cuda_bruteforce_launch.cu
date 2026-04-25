@@ -26,6 +26,7 @@ constexpr int kWarpCount = kThreadsPerBlock / kWarpSize;
 constexpr std::size_t kAutoChunkBits = 12;
 constexpr std::size_t kSupportedWordsPerRow512 = 8;
 constexpr std::size_t kSupportedWordsPerRow1024 = 16;
+constexpr std::size_t kSupportedWordsPerRow4096 = 64;
 constexpr std::size_t kMaxRows = 64;
 constexpr std::size_t kMaskBits = 64;
 
@@ -55,7 +56,8 @@ struct BruteforceDeviceWorkspace {
 };
 
 bool is_supported_words_per_row(const std::size_t words_per_row) noexcept {
-    return words_per_row == kSupportedWordsPerRow512 || words_per_row == kSupportedWordsPerRow1024;
+    return words_per_row == kSupportedWordsPerRow512 ||
+           words_per_row == kSupportedWordsPerRow1024 || words_per_row == kSupportedWordsPerRow4096;
 }
 
 std::size_t resolve_chunk_bits(const std::size_t rows, const std::size_t configured_chunk_bits) {
@@ -134,11 +136,12 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
                                              const std::uint32_t k,
                                              DeviceTopKEntry* __restrict__ block_results) {
     constexpr int KStatic = kMaxCandidates;
+    constexpr int kWordsPerLane = (WordCount + kWarpSize - 1) / kWarpSize;
     const int kk = k < static_cast<std::uint32_t>(KStatic) ? static_cast<int>(k) : KStatic;
 
     const int warp_id = static_cast<int>(threadIdx.x) / kWarpSize;
     const int lane_id = static_cast<int>(threadIdx.x) % kWarpSize;
-    const bool lane_active = lane_id < WordCount;
+    // const bool lane_active = lane_id < WordCount;
 
     extern __shared__ std::uint64_t shared_rows[];
 
@@ -170,26 +173,48 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
     const std::uint64_t prefix_stride =
         static_cast<std::uint64_t>(gridDim.x) * static_cast<std::uint64_t>(kWarpCount);
 
-    for (std::uint64_t prefix = first_prefix; prefix < prefix_count; prefix += prefix_stride) {
-        std::uint64_t current_word = 0;
+    std::uint64_t current_words[kWordsPerLane];
 
-        if (lane_active) {
-            for (std::uint32_t high = 0; high < high_bits; ++high) {
-                if (((prefix >> high) & std::uint64_t{1}) == 0)
+    for (std::uint64_t prefix = first_prefix; prefix < prefix_count; prefix += prefix_stride) {
+#pragma unroll
+        for (int slot = 0; slot < kWordsPerLane; ++slot)
+            current_words[slot] = 0;
+
+        for (std::uint32_t high = 0; high < high_bits; ++high) {
+            if (((prefix >> high) & std::uint64_t{1}) == 0)
+                continue;
+
+            const std::size_t row_base =
+                static_cast<std::size_t>(chunk_bits + high) * static_cast<std::size_t>(WordCount);
+
+#pragma unroll
+            for (int slot = 0; slot < kWordsPerLane; ++slot) {
+                const std::size_t word_index =
+                    static_cast<std::size_t>(lane_id) +
+                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+
+                if (word_index >= static_cast<std::size_t>(WordCount))
                     continue;
 
-                current_word ^= shared_rows[(static_cast<std::size_t>(chunk_bits + high) *
-                                             static_cast<std::size_t>(WordCount)) +
-                                            static_cast<std::size_t>(lane_id)];
+                current_words[slot] ^= shared_rows[row_base + word_index];
             }
         }
 
         std::uint64_t current_mask = prefix << chunk_bits;
 
-        std::uint32_t lane_popcount =
-            lane_active ? static_cast<std::uint32_t>(
-                              __popcll(static_cast<unsigned long long>(current_word)))
-                        : 0u;
+        std::uint32_t lane_popcount = 0;
+#pragma unroll
+        for (int slot = 0; slot < kWordsPerLane; ++slot) {
+            const std::size_t word_index =
+                static_cast<std::size_t>(lane_id) +
+                static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+
+            if (word_index >= static_cast<std::size_t>(WordCount))
+                continue;
+
+            lane_popcount += static_cast<std::uint32_t>(
+                __popcll(static_cast<unsigned long long>(current_words[slot])));
+        }
         std::uint32_t total_popcount = warp_sum_u32(lane_popcount);
 
         if (lane_id == 0 && current_mask != 0) {
@@ -202,16 +227,35 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
         for (std::uint64_t step = 1; step < low_states; ++step) {
             const std::uint32_t bit = static_cast<std::uint32_t>(ctz64_device(step));
 
-            if (lane_active) {
-                current_word ^= shared_rows[(static_cast<std::size_t>(bit) *
-                                             static_cast<std::size_t>(WordCount)) +
-                                            static_cast<std::size_t>(lane_id)];
+            const std::size_t row_base =
+                static_cast<std::size_t>(bit) * static_cast<std::size_t>(WordCount);
+
+#pragma unroll
+            for (int slot = 0; slot < kWordsPerLane; ++slot) {
+                const std::size_t word_index =
+                    static_cast<std::size_t>(lane_id) +
+                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+
+                if (word_index >= static_cast<std::size_t>(WordCount))
+                    continue;
+
+                current_words[slot] ^= shared_rows[row_base + word_index];
             }
             current_mask ^= (std::uint64_t{1} << bit);
 
-            lane_popcount = lane_active ? static_cast<std::uint32_t>(__popcll(
-                                              static_cast<unsigned long long>(current_word)))
-                                        : 0u;
+            lane_popcount = 0;
+#pragma unroll
+            for (int slot = 0; slot < kWordsPerLane; ++slot) {
+                const std::size_t word_index =
+                    static_cast<std::size_t>(lane_id) +
+                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+
+                if (word_index >= static_cast<std::size_t>(WordCount))
+                    continue;
+
+                lane_popcount += static_cast<std::uint32_t>(
+                    __popcll(static_cast<unsigned long long>(current_words[slot])));
+            }
             total_popcount = warp_sum_u32(lane_popcount);
 
             if (lane_id == 0) {
@@ -321,9 +365,12 @@ void dispatch_bruteforce_kernel(const CudaBruteforcePlan& plan,
     case kSupportedWordsPerRow1024:
         launch_bruteforce_kernel<16>(workspace, plan.rows, chunk_bits, prefix_count, k);
         break;
+    case kSupportedWordsPerRow4096:
+        launch_bruteforce_kernel<64>(workspace, plan.rows, chunk_bits, prefix_count, k);
+        break;
     default:
         throw std::invalid_argument(
-            "run_cuda_bruteforce_search: only widths 512 and 1024 are supported");
+            "run_cuda_bruteforce_search: only widths 512, 1024, and 4096 are supported");
     }
 }
 
@@ -371,7 +418,7 @@ std::vector<CudaBruteforceResult> run_cuda_bruteforce_search(const CudaBruteforc
 
     if (!is_supported_words_per_row(plan.words_per_row)) {
         throw std::invalid_argument(
-            "run_cuda_bruteforce_search: only widths 512 and 1024 are supported");
+            "run_cuda_bruteforce_search: only widths 512, 1024, and 4096 are supported");
     }
 
     if (plan.row_words.size() != plan.rows * plan.words_per_row) {

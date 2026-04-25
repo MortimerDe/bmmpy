@@ -573,6 +573,26 @@ void test_cuda_bruteforce_supports_128_candidates_when_available() {
     require_same_candidates(actual, expected, "cuda_bruteforce supports 128 candidates");
 }
 
+void test_cuda_bruteforce_supports_4096_width_when_available() {
+    const auto features = bmmpy::get_runtime_features();
+    if (!(features.cuda_compiled && features.cuda_available))
+        return;
+
+    const bmmpy::BitMatrix matrix = make_cuda_equivalence_matrix(16, 4096);
+
+    std::vector<std::size_t> rows(16);
+    std::iota(rows.begin(), rows.end(), 0);
+    const auto window = matrix.row_window(rows);
+
+    bmmpy::BruteforceSearch cpu(bmmpy::BruteforceSearchConfig{8, 0});
+    bmmpy::CudaBruteforceSearch gpu(bmmpy::CudaBruteforceSearchConfig{8, 0});
+
+    const auto expected = cpu.search(window);
+    const auto actual = gpu.search(window);
+
+    require_same_candidates(actual, expected, "cuda_bruteforce supports 4096 width");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -617,6 +637,8 @@ int main() {
          &test_cuda_bruteforce_matches_cpu_bruteforce_when_available},
         {"cuda_bruteforce_supports_128_candidates_when_available",
          &test_cuda_bruteforce_supports_128_candidates_when_available},
+        {"cuda_bruteforce_supports_4096_width_when_available",
+         &test_cuda_bruteforce_supports_4096_width_when_available},
     };
 
     for (const TestCase& test : tests) {

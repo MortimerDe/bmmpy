@@ -14,6 +14,7 @@ namespace {
 constexpr std::size_t kMaxCudaCandidates = 128;
 constexpr std::size_t kSupportedWordsPerRow512 = 8;
 constexpr std::size_t kSupportedWordsPerRow1024 = 16;
+constexpr std::size_t kSupportedWordsPerRow4096 = 64;
 
 std::size_t resolve_chunk_bits(const std::size_t t, const std::size_t configured_chunk_bits) {
     if (configured_chunk_bits == 0)
@@ -28,7 +29,8 @@ std::size_t resolve_chunk_bits(const std::size_t t, const std::size_t configured
 }
 
 bool is_supported_words_per_row(const std::size_t words_per_row) noexcept {
-    return words_per_row == kSupportedWordsPerRow512 || words_per_row == kSupportedWordsPerRow1024;
+    return words_per_row == kSupportedWordsPerRow512 ||
+           words_per_row == kSupportedWordsPerRow1024 || words_per_row == kSupportedWordsPerRow4096;
 }
 
 } // namespace
@@ -60,8 +62,8 @@ std::vector<Candidate> CudaBruteforceSearch::search(const RowWindow& window) {
         return {};
 
     if (!is_supported_words_per_row(words_per_row)) {
-        throw std::invalid_argument(
-            "CudaBruteforceSearch: only widths 512 and 1024 are supported in the current GPU path");
+        throw std::invalid_argument("CudaBruteforceSearch: only widths 512, 1024, and 4096 are "
+                                    "supported in the current GPU path");
     }
 
     const std::size_t chunk_bits = resolve_chunk_bits(t, _config.chunk_bits);
