@@ -369,7 +369,22 @@ std::vector<CudaBruteforceResult> run_cuda_bruteforce_search(const CudaBruteforc
     dispatch_bruteforce_kernel(plan, workspace, chunk_bits, prefix_count, max_candidates);
     check_cuda(cudaDeviceSynchronize(), "cudaDeviceSynchronize");
 
-    return {};
+    std::vector<DeviceTopKEntry> host_out(max_candidates);
+    check_cuda(cudaMemcpy(host_out.data(),
+                          workspace.results.d_out_results,
+                          max_candidates * sizeof(DeviceTopKEntry),
+                          cudaMemcpyDeviceToHost),
+               "cudaMemcpy(cuda_bruteforce_out_results)");
+
+    std::vector<CudaBruteforceResult> out;
+    out.reserve(max_candidates);
+
+    for (const DeviceTopKEntry& entry : host_out) {
+        if (entry.mask != 0)
+            out.push_back(CudaBruteforceResult{entry.mask, entry.weight});
+    }
+
+    return out;
 }
 
 } // namespace bmmpy
