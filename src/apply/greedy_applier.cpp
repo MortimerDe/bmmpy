@@ -1,4 +1,4 @@
-#include "bmmpy/apply/greedy_selection.hpp"
+#include "bmmpy/apply/greedy_applier.hpp"
 
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
 
@@ -10,7 +10,7 @@
 
 namespace bmmpy {
 
-ApplyResult GreedySelection::apply(RowWindow& window, const std::vector<Candidate>& candidates) {
+ApplyResult GreedyApplier::apply(RowWindow& window, const std::vector<Candidate>& candidates) {
 
     const std::size_t n = window.size();
     if (n > 64)

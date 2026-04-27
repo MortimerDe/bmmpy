@@ -119,7 +119,7 @@ class PublicApiTests(unittest.TestCase):
     def test_search_apply(self) -> None:
         matrix = make_search_matrix()
         searcher = bmm.FwhtSearch(max_rows=16, max_candidates=1)
-        selector = bmm.GreedySelection(min_gain=1)
+        selector = bmm.GreedyApplier(min_gain=1)
 
         window = matrix.row_window([0, 1])
         result = bmm.search_apply(
