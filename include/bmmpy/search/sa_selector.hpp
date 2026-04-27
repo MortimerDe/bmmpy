@@ -11,6 +11,7 @@ namespace bmmpy {
 
 enum class WindowScorePolicyKind {
     PairwiseSynergy = 0,
+    HigherOrderSynergy = 1,
 };
 
 enum class CoolingPolicyKind {

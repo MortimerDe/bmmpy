@@ -42,6 +42,8 @@ from ._bmmpy import (
 def _resolve_score_policy(name: str):
     if name == "pairwise_synergy":
         return _NativeWindowScorePolicyKind.PairwiseSynergy
+    if name == "higher_order_synergy":
+        return _NativeWindowScorePolicyKind.HigherOrderSynergy
     raise ValueError(f"Unsupported score_policy: {name!r}")
 
 
@@ -424,8 +426,8 @@ class SASelector:
     seed : int, default=0
         Seed for the native pseudo-random generator.
     score_policy : str, default="pairwise_synergy"
-        Window scoring policy. The current implementation supports only
-        ``"pairwise_synergy"``.
+        Window scoring policy. Supported values are
+        "pairwise_synergy" and "higher_order_synergy".
     cooling_policy : str, default="adaptive_geometric"
         Cooling schedule policy. The current implementation supports only
         ``"adaptive_geometric"``.

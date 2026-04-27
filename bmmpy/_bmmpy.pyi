@@ -308,6 +308,8 @@ class CudaBruteforceSearch:
 class WindowScorePolicyKind(enum.Enum):
     PairwiseSynergy = 0
 
+    HigherOrderSynergy = 1
+
 class CoolingPolicyKind(enum.Enum):
     AdaptiveGeometric = 0
 

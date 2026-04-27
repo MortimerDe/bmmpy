@@ -71,7 +71,8 @@ void bind_search(nb::module_& m) {
         .def("search", &::bmmpy::CudaBruteforceSearch::search, nb::arg("window"));
 
     nb::enum_<::bmmpy::WindowScorePolicyKind>(m, "WindowScorePolicyKind")
-        .value("PairwiseSynergy", ::bmmpy::WindowScorePolicyKind::PairwiseSynergy);
+        .value("PairwiseSynergy", ::bmmpy::WindowScorePolicyKind::PairwiseSynergy)
+        .value("HigherOrderSynergy", ::bmmpy::WindowScorePolicyKind::HigherOrderSynergy);
 
     nb::enum_<::bmmpy::CoolingPolicyKind>(m, "CoolingPolicyKind")
         .value("AdaptiveGeometric", ::bmmpy::CoolingPolicyKind::AdaptiveGeometric);
