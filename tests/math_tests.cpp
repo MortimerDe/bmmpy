@@ -1,4 +1,5 @@
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/detail/bit_ops.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
 #include "bmmpy/search/bruteforce_search.hpp"
@@ -224,6 +225,30 @@ void test_calc_scores_and_order_i16() {
     require_eq<std::int16_t>(s_by_mask, {0, 0, 1, 2, 3}, "scores_i16");
     require_eq<std::int32_t>(order, {1, 2, 3, 4}, "order_i16");
     require_eq<std::int32_t>(cnt, {1, 1, 1, 1, 0}, "cnt_i16");
+}
+
+void test_row_and_popcount_counts_intersection() {
+    bmmpy::BitMatrix matrix(2, 130);
+
+    for (std::size_t col : {0u, 63u, 64u, 100u, 129u})
+        matrix.set(0, col, true);
+
+    for (std::size_t col : {1u, 63u, 64u, 65u, 100u, 129u})
+        matrix.set(1, col, true);
+
+    const auto& ops = bmmpy::detail::bit_ops();
+    const std::uint64_t expected = 4;
+
+    require(ops.row_and_popcount != nullptr, "row_and_popcount dispatch is missing");
+    require(ops.row_and_popcount(
+                matrix.row_words(0), matrix.row_words(1), matrix.words_per_row()) == expected,
+            "row_and_popcount words_per_row mismatch");
+    require(ops.row_and_popcount(
+                matrix.row_words(1), matrix.row_words(0), matrix.words_per_row()) == expected,
+            "row_and_popcount symmetry mismatch");
+    require(ops.row_and_popcount(matrix.row_words(0), matrix.row_words(1), matrix.stride_words()) ==
+                expected,
+            "row_and_popcount padded stride mismatch");
 }
 
 void test_fwht_search_finds_best_candidate() {
@@ -608,6 +633,7 @@ int main() {
         {"fwht_i16_wrap", &test_fwht_i16_wrap},
         {"calc_scores_and_order_i32", &test_calc_scores_and_order_i32},
         {"calc_scores_and_order_i16", &test_calc_scores_and_order_i16},
+        {"row_and_popcount_counts_intersection", &test_row_and_popcount_counts_intersection},
         {"compact_split_window_collects_expected_patterns",
          &test_compact_split_window_collects_expected_patterns},
         {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
