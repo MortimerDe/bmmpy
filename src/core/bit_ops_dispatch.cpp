@@ -8,6 +8,7 @@ const BitOps& bit_ops() noexcept {
         BitOps selected;
         selected.row_xor = &row_xor_scalar;
         selected.row_popcount = &row_popcount_scalar;
+        selected.row_and_popcount = &row_and_popcount_scalar;
         selected.row_swap = &row_swap_scalar;
 
 #if defined(BMMPY_HAS_AVX2_BACKEND)
@@ -15,6 +16,7 @@ const BitOps& bit_ops() noexcept {
             selected.row_xor = &row_xor_avx2;
             selected.row_swap = &row_swap_avx2;
             selected.row_popcount = &row_popcount_avx2;
+            selected.row_and_popcount = &row_and_popcount_avx2;
         }
 #endif
         return selected;

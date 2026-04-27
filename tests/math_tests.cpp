@@ -1,9 +1,11 @@
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/detail/bit_ops.hpp"
 #include "bmmpy/math/comb.hpp"
 #include "bmmpy/math/fwht.hpp"
 #include "bmmpy/search/bruteforce_search.hpp"
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/sa_selector.hpp"
 #include "bmmpy/search/searcher.hpp"
 #include "bmmpy/search/split_window_prep.hpp"
 #include "bmmpy/stub.hpp"
@@ -51,6 +53,19 @@ bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) 
     }
 
     return matrix;
+}
+
+bmmpy::BitMatrix make_sa_cluster_matrix() {
+    return matrix_from_rows({
+        "111111000000",
+        "111111000000",
+        "111111000000",
+        "111111000000",
+        "000000000000",
+        "000000000000",
+        "000000000000",
+        "000000000000",
+    });
 }
 
 bmmpy::BitMatrix make_cuda_equivalence_matrix(std::size_t rows = 28, std::size_t cols = 96) {
@@ -224,6 +239,30 @@ void test_calc_scores_and_order_i16() {
     require_eq<std::int16_t>(s_by_mask, {0, 0, 1, 2, 3}, "scores_i16");
     require_eq<std::int32_t>(order, {1, 2, 3, 4}, "order_i16");
     require_eq<std::int32_t>(cnt, {1, 1, 1, 1, 0}, "cnt_i16");
+}
+
+void test_row_and_popcount_counts_intersection() {
+    bmmpy::BitMatrix matrix(2, 130);
+
+    for (std::size_t col : {0u, 63u, 64u, 100u, 129u})
+        matrix.set(0, col, true);
+
+    for (std::size_t col : {1u, 63u, 64u, 65u, 100u, 129u})
+        matrix.set(1, col, true);
+
+    const auto& ops = bmmpy::detail::bit_ops();
+    const std::uint64_t expected = 4;
+
+    require(ops.row_and_popcount != nullptr, "row_and_popcount dispatch is missing");
+    require(ops.row_and_popcount(
+                matrix.row_words(0), matrix.row_words(1), matrix.words_per_row()) == expected,
+            "row_and_popcount words_per_row mismatch");
+    require(ops.row_and_popcount(
+                matrix.row_words(1), matrix.row_words(0), matrix.words_per_row()) == expected,
+            "row_and_popcount symmetry mismatch");
+    require(ops.row_and_popcount(matrix.row_words(0), matrix.row_words(1), matrix.stride_words()) ==
+                expected,
+            "row_and_popcount padded stride mismatch");
 }
 
 void test_fwht_search_finds_best_candidate() {
@@ -593,6 +632,55 @@ void test_cuda_bruteforce_supports_4096_width_when_available() {
     require_same_candidates(actual, expected, "cuda_bruteforce supports 4096 width");
 }
 
+void test_sa_selector_is_deterministic_for_same_seed() {
+    const bmmpy::BitMatrix matrix = make_sa_cluster_matrix();
+
+    const bmmpy::SASelector selector({
+        256,
+        8,
+        12345,
+        bmmpy::WindowScorePolicyKind::PairwiseSynergy,
+        bmmpy::CoolingPolicyKind::AdaptiveGeometric,
+        32,
+        0.8,
+        0.99,
+        1e-6,
+    });
+
+    const auto lhs = selector.select(matrix, 4);
+    const auto rhs = selector.select(matrix, 4);
+
+    require(lhs.rows == rhs.rows, "sa selector deterministic rows");
+    require(lhs.score == rhs.score, "sa selector deterministic score");
+    require(lhs.best_iteration == rhs.best_iteration, "sa selector deterministic best_iteration");
+    require(lhs.restart_index == rhs.restart_index, "sa selector deterministic restart");
+    require(lhs.accepted_moves == rhs.accepted_moves, "sa selector deterministic accepted_moves");
+    require(lhs.iterations_run == rhs.iterations_run, "sa selector deterministic iterations_run");
+}
+
+void test_sa_selector_prefers_dense_cluster() {
+    const bmmpy::BitMatrix matrix = make_sa_cluster_matrix();
+
+    const bmmpy::SASelector selector({
+        256,
+        8,
+        7,
+        bmmpy::WindowScorePolicyKind::PairwiseSynergy,
+        bmmpy::CoolingPolicyKind::AdaptiveGeometric,
+        32,
+        0.8,
+        0.99,
+        1e-6,
+    });
+
+    const auto result = selector.select(matrix, 4);
+    require_eq<std::size_t>(result.rows, {0, 1, 2, 3}, "sa selector best cluster rows");
+    require(result.score == 72, "sa selector best cluster score");
+
+    const auto window = selector.select_window(matrix, 4);
+    require_eq<std::size_t>(window.global_rows(), {0, 1, 2, 3}, "sa selector select_window rows");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -608,6 +696,7 @@ int main() {
         {"fwht_i16_wrap", &test_fwht_i16_wrap},
         {"calc_scores_and_order_i32", &test_calc_scores_and_order_i32},
         {"calc_scores_and_order_i16", &test_calc_scores_and_order_i16},
+        {"row_and_popcount_counts_intersection", &test_row_and_popcount_counts_intersection},
         {"compact_split_window_collects_expected_patterns",
          &test_compact_split_window_collects_expected_patterns},
         {"fwht_search_finds_best_candidate", &test_fwht_search_finds_best_candidate},
@@ -639,6 +728,9 @@ int main() {
          &test_cuda_bruteforce_supports_128_candidates_when_available},
         {"cuda_bruteforce_supports_4096_width_when_available",
          &test_cuda_bruteforce_supports_4096_width_when_available},
+        {"sa_selector_is_deterministic_for_same_seed",
+         &test_sa_selector_is_deterministic_for_same_seed},
+        {"sa_selector_prefers_dense_cluster", &test_sa_selector_prefers_dense_cluster},
     };
 
     for (const TestCase& test : tests) {

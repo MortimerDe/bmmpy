@@ -119,13 +119,13 @@ class PublicApiTests(unittest.TestCase):
     def test_search_apply(self) -> None:
         matrix = make_search_matrix()
         searcher = bmm.FwhtSearch(max_rows=16, max_candidates=1)
-        selector = bmm.GreedySelection(min_gain=1)
+        applier = bmm.GreedyApplier(min_gain=1)
 
         window = matrix.row_window([0, 1])
         result = bmm.search_apply(
             window,
             searcher=searcher,
-            selector=selector,
+            applier=applier,
         )
 
         self.assertGreaterEqual(result.applied_count, 1)
@@ -266,6 +266,7 @@ class PublicApiTests(unittest.TestCase):
             [(c.mask_u64(), c.weight) for c in gpu.search(window)],
             [(c.mask_u64(), c.weight) for c in cpu.search(window)],
         )
+
     def test_row_window_python_metadata(self) -> None:
         matrix = bmm.matrix_from_rows([
             "10101",
@@ -278,6 +279,30 @@ class PublicApiTests(unittest.TestCase):
         self.assertEqual(window.row_popcount(1), 2)
         self.assertEqual(window.row_popcount(2), 1)
         self.assertEqual(window.total_weight, 4)
+    
+    def test_sa_selector_wrapper(self) -> None:
+        matrix = bmm.matrix_from_rows(
+            [
+                "111111000000",
+                "111111000000",
+                "111111000000",
+                "111111000000",
+                "000000000000",
+                "000000000000",
+                "000000000000",
+                "000000000000",
+            ]
+        )
+
+        selector = bmm.SASelector(iterations=256, restarts=8, seed=7)
+
+        result = selector.select(matrix, 4)
+        self.assertEqual(result.rows, [0, 1, 2, 3])
+        self.assertEqual(result.score, 72)
+
+        window = selector.select_window(matrix, 4)
+        self.assertEqual(window.rows, [0, 1, 2, 3])
+        self.assertEqual(window.materialize().to_rows(), ["111111000000"] * 4)
 
 if __name__ == "__main__":
     unittest.main()

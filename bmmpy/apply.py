@@ -1,8 +1,8 @@
 """
 Apply strategies for bmmpy.
 
-Selectors consume Candidate objects produced for a RowWindow and update the
-underlying BitMatrix in place. GreedySelection is the current built-in strategy
+Appliers consume Candidate objects produced for a RowWindow and update the
+underlying BitMatrix in place. GreedyApplier is the current built-in strategy
 for accepting beneficial row transformations.
 
 Examples
@@ -14,7 +14,7 @@ Examples
 ...     matrix[1, col] = True
 >>> window = matrix.row_window([0, 1])
 >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
->>> result = bmm.GreedySelection(min_gain=1).apply(window, candidates)
+>>> result = bmm.GreedyApplier(min_gain=1).apply(window, candidates)
 >>> result.applied_count >= 1
 True
 """
@@ -27,7 +27,7 @@ from ._bmmpy import (
     ApplyResult,
     Candidate,
     RowWindow,
-    GreedySelection as _NativeGreedySelection,
+    GreedyApplier as _NativeGreedyApplier,
 )
 
 ApplyResult.__doc__ = """
@@ -41,7 +41,7 @@ weight_improvement : int
     Total reduction in row weight across all accepted applications.
 """
 
-class GreedySelection:
+class GreedyApplier:
     """
     Apply candidates greedily to reduce row weights in a window.
 
@@ -56,7 +56,7 @@ class GreedySelection:
 
     Notes
     -----
-    This selector mutates the underlying matrix through the provided RowWindow.
+    This applier mutates the underlying matrix through the provided RowWindow.
 
     Examples
     --------
@@ -67,8 +67,8 @@ class GreedySelection:
     ...     matrix[1, col] = True
     >>> window = matrix.row_window([0, 1])
     >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
-    >>> selector = bmm.GreedySelection(min_gain=1)
-    >>> result = selector.apply(window, candidates)
+    >>> applier = bmm.GreedyApplier(min_gain=1)
+    >>> result = applier.apply(window, candidates)
     >>> result.applied_count >= 1
     True
     """
@@ -79,11 +79,11 @@ class GreedySelection:
         self.min_gain = min_gain
         self.stochastic = stochastic
         self.seed = seed
-        self._impl = _NativeGreedySelection(min_gain, stochastic=stochastic, seed=seed)
+        self._impl = _NativeGreedyApplier(min_gain, stochastic=stochastic, seed=seed)
 
     def __repr__(self) -> str:
         return (
-            "GreedySelection("
+            "GreedyApplier("
             f"min_gain={self.min_gain}, "
             f"stochastic={self.stochastic}, "
             f"seed={self.seed})"
@@ -122,11 +122,11 @@ class GreedySelection:
         ...     matrix[1, col] = True
         >>> window = matrix.row_window([0, 1])
         >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
-        >>> result = bmm.GreedySelection(min_gain=1).apply(window, candidates)
+        >>> result = bmm.GreedyApplier(min_gain=1).apply(window, candidates)
         >>> result.weight_improvement > 0
         True
         """
         return self._impl.apply(window, list(candidates))
 
 
-__all__ = ["GreedySelection"]
+__all__ = ["GreedyApplier"]

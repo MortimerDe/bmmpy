@@ -1,4 +1,4 @@
-#include "bmmpy/apply/greedy_selection.hpp"
+#include "bmmpy/apply/greedy_applier.hpp"
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/mitm_fwht_search.hpp"
@@ -41,7 +41,7 @@ int main() {
     bmmpy::CudaMitmFwhtSearch searcher({64, 0});
     // bmmpy::MitmFwhtSearch searcher({});
 
-    bmmpy::GreedySelection greedy({1, false, 0x12345678});
+    bmmpy::GreedyApplier greedy({1, false, 0x12345678});
 
     int32_t weight_before = bm.weight();
 

@@ -16,7 +16,7 @@ Examples
 >>> result = bmm.search_apply(
 ...     window,
 ...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
-...     selector=bmm.GreedySelection(min_gain=1),
+...     applier=bmm.GreedyApplier(min_gain=1),
 ... )
 >>> result.applied_count >= 1
 True
@@ -46,7 +46,7 @@ def search_apply(
     window: RowWindow,
     *,
     searcher: SupportsSearch,
-    selector: SupportsApply,
+    applier: SupportsApply,
 ) -> ApplyResult:
     """Run search and apply back-to-back on the same row window.
 
@@ -56,7 +56,7 @@ def search_apply(
         Window to inspect and update.
     searcher : SupportsSearch
         Object with a ``search(window)`` method returning Candidate objects.
-    selector : SupportsApply
+    applier : SupportsApply
         Object with an ``apply(window, candidates)`` method.
 
     Returns
@@ -79,7 +79,7 @@ def search_apply(
     >>> result = bmm.search_apply(
     ...     window,
     ...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
-    ...     selector=bmm.GreedySelection(min_gain=1),
+    ...     applier=bmm.GreedyApplier(min_gain=1),
     ... )
     >>> result.applied_count >= 1
     True
@@ -87,6 +87,6 @@ def search_apply(
     True
     """
     candidates = searcher.search(window)
-    return selector.apply(window, candidates)
+    return applier.apply(window, candidates)
 
 __all__ = ["search_apply"]

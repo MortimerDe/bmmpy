@@ -30,38 +30,16 @@ void row_xor_avx2(std::uint64_t* dst, const std::uint64_t* src, std::size_t len)
 
 std::uint64_t row_popcount_avx2(const std::uint64_t* src, std::size_t len) noexcept {
     const __m256i low_mask = _mm256_set1_epi8(0x0f);
-    const __m256i lookup = _mm256_setr_epi8(0,
-                                            1,
-                                            1,
-                                            2,
-                                            1,
-                                            2,
-                                            2,
-                                            3,
-                                            1,
-                                            2,
-                                            2,
-                                            3,
-                                            2,
-                                            3,
-                                            3,
-                                            4,
-                                            0,
-                                            1,
-                                            1,
-                                            2,
-                                            1,
-                                            2,
-                                            2,
-                                            3,
-                                            1,
-                                            2,
-                                            2,
-                                            3,
-                                            2,
-                                            3,
-                                            3,
-                                            4);
+    // clang-format off
+    const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2,
+                                            1, 2, 2, 3,
+                                            1, 2, 2, 3,
+                                            2, 3, 3, 4,
+                                            0, 1, 1, 2,
+                                            1, 2, 2, 3,
+                                            1, 2, 2, 3,
+                                            2, 3, 3, 4);
+    // clang-format on
     const __m256i zero = _mm256_setzero_si256();
 
     std::size_t i = 0;
@@ -83,6 +61,47 @@ std::uint64_t row_popcount_avx2(const std::uint64_t* src, std::size_t len) noexc
 
     for (; i < len; ++i)
         result += static_cast<std::uint64_t>(popcount64(src[i]));
+
+    return result;
+}
+
+std::uint64_t row_and_popcount_avx2(const std::uint64_t* lhs,
+                                    const std::uint64_t* rhs,
+                                    std::size_t len) noexcept {
+    const __m256i low_mask = _mm256_set1_epi8(0x0f);
+    // clang-format off
+    const __m256i lookup = _mm256_setr_epi8(0, 1, 1, 2,
+                                            1, 2, 2, 3,
+                                            1, 2, 2, 3,
+                                            2, 3, 3, 4,
+                                            0, 1, 1, 2,
+                                            1, 2, 2, 3,
+                                            1, 2, 2, 3,
+                                            2, 3, 3, 4);
+    // clang-format on
+    const __m256i zero = _mm256_setzero_si256();
+
+    std::size_t i = 0;
+    __m256i total = _mm256_setzero_si256();
+
+    for (; i + 4 <= len; i += 4) {
+        const __m256i lhs_v = _mm256_load_si256(reinterpret_cast<const __m256i*>(lhs + i));
+        const __m256i rhs_v = _mm256_load_si256(reinterpret_cast<const __m256i*>(rhs + i));
+        const __m256i v = _mm256_and_si256(lhs_v, rhs_v);
+
+        const __m256i lo = _mm256_and_si256(v, low_mask);
+        const __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), low_mask);
+
+        const __m256i popcnt_bytes =
+            _mm256_add_epi8(_mm256_shuffle_epi8(lookup, lo), _mm256_shuffle_epi8(lookup, hi));
+
+        total = _mm256_add_epi64(total, _mm256_sad_epu8(popcnt_bytes, zero));
+    }
+
+    std::uint64_t result = hsum_u64x4(total);
+
+    for (; i < len; ++i)
+        result += static_cast<std::uint64_t>(popcount64(lhs[i] & rhs[i]));
 
     return result;
 }
