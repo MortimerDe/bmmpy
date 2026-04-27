@@ -5,6 +5,7 @@
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
 #include "bmmpy/search/mitm_fwht_search.hpp"
+#include "bmmpy/search/sa_selector.hpp"
 
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
@@ -68,6 +69,49 @@ void bind_search(nb::module_& m) {
              nb::arg("config") = ::bmmpy::CudaBruteforceSearchConfig{})
         .def("name", &::bmmpy::CudaBruteforceSearch::name)
         .def("search", &::bmmpy::CudaBruteforceSearch::search, nb::arg("window"));
+
+    nb::enum_<::bmmpy::WindowScorePolicyKind>(m, "WindowScorePolicyKind")
+        .value("PairwiseSynergy", ::bmmpy::WindowScorePolicyKind::PairwiseSynergy);
+
+    nb::enum_<::bmmpy::CoolingPolicyKind>(m, "CoolingPolicyKind")
+        .value("AdaptiveGeometric", ::bmmpy::CoolingPolicyKind::AdaptiveGeometric);
+
+    nb::class_<::bmmpy::SASelectorConfig>(m, "SASelectorConfig")
+        .def(nb::init<>())
+        .def_rw("iterations", &::bmmpy::SASelectorConfig::iterations)
+        .def_rw("restarts", &::bmmpy::SASelectorConfig::restarts)
+        .def_rw("seed", &::bmmpy::SASelectorConfig::seed)
+        .def_rw("score_policy", &::bmmpy::SASelectorConfig::score_policy)
+        .def_rw("cooling_policy", &::bmmpy::SASelectorConfig::cooling_policy)
+        .def_rw("temperature_probe_samples", &::bmmpy::SASelectorConfig::temperature_probe_samples)
+        .def_rw("initial_acceptance_probability",
+                &::bmmpy::SASelectorConfig::initial_acceptance_probability)
+        .def_rw("cooling_rate", &::bmmpy::SASelectorConfig::cooling_rate)
+        .def_rw("min_temperature", &::bmmpy::SASelectorConfig::min_temperature);
+
+    nb::class_<::bmmpy::SASelectionResult>(m, "SASelectionResult")
+        .def(nb::init<>())
+        .def_rw("rows", &::bmmpy::SASelectionResult::rows)
+        .def_rw("score", &::bmmpy::SASelectionResult::score)
+        .def_rw("accepted_moves", &::bmmpy::SASelectionResult::accepted_moves)
+        .def_rw("iterations_run", &::bmmpy::SASelectionResult::iterations_run)
+        .def_rw("best_iteration", &::bmmpy::SASelectionResult::best_iteration)
+        .def_rw("restart_index", &::bmmpy::SASelectionResult::restart_index)
+        .def_rw("seed", &::bmmpy::SASelectionResult::seed);
+
+    nb::class_<::bmmpy::SASelector>(m, "SASelector")
+        .def(nb::init<::bmmpy::SASelectorConfig>(), nb::arg("config") = ::bmmpy::SASelectorConfig{})
+        .def("name", &::bmmpy::SASelector::name)
+        .def("select", &::bmmpy::SASelector::select, nb::arg("matrix"), nb::arg("window_size"))
+        .def(
+            "select_window",
+            [](::bmmpy::SASelector& selector, ::bmmpy::BitMatrix& matrix, std::size_t window_size) {
+                return selector.select_window(matrix, window_size);
+            },
+            nb::arg("matrix"),
+            nb::arg("window_size"),
+            nb::keep_alive<0, 2>(),
+            nb::rv_policy::move);
 }
 
 } // namespace bmmpy::bindings

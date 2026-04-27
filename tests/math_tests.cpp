@@ -654,6 +654,8 @@ void test_sa_selector_is_deterministic_for_same_seed() {
     require(lhs.score == rhs.score, "sa selector deterministic score");
     require(lhs.best_iteration == rhs.best_iteration, "sa selector deterministic best_iteration");
     require(lhs.restart_index == rhs.restart_index, "sa selector deterministic restart");
+    require(lhs.accepted_moves == rhs.accepted_moves, "sa selector deterministic accepted_moves");
+    require(lhs.iterations_run == rhs.iterations_run, "sa selector deterministic iterations_run");
 }
 
 void test_sa_selector_prefers_dense_cluster() {
