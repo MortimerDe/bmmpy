@@ -15,11 +15,9 @@ struct ApplyResult {
     std::uint64_t weight_improvement = 0;
 };
 
-class GreedySelection {
+class GreedyApplier {
 public:
-    GreedySelection(std::uint64_t min_gain,
-                    bool stochastic = false,
-                    std::uint64_t seed = 0) noexcept
+    GreedyApplier(std::uint64_t min_gain, bool stochastic = false, std::uint64_t seed = 0) noexcept
         : _min_gain(min_gain), _stochastic(stochastic), _prng_state(seed == 0 ? 0xDEADBULL : seed) {
     }
 

@@ -2,7 +2,7 @@
 Candidate type for bmmpy search results.
 
 A Candidate represents a subset of rows inside a RowWindow together with the
-weight of the resulting linear combination. Search algorithms return Candidate objects, and apply strategies such as GreedySelection consume them.
+weight of the resulting linear combination. Search algorithms return Candidate objects, and apply strategies such as GreedyApplier consume them.
 
 Examples
 --------

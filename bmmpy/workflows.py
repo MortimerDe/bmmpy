@@ -16,7 +16,7 @@ Examples
 >>> result = bmm.search_apply(
 ...     window,
 ...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
-...     selector=bmm.GreedySelection(min_gain=1),
+...     selector=bmm.GreedyApplier(min_gain=1),
 ... )
 >>> result.applied_count >= 1
 True
@@ -79,7 +79,7 @@ def search_apply(
     >>> result = bmm.search_apply(
     ...     window,
     ...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
-    ...     selector=bmm.GreedySelection(min_gain=1),
+    ...     selector=bmm.GreedyApplier(min_gain=1),
     ... )
     >>> result.applied_count >= 1
     True

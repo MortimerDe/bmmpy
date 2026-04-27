@@ -2,7 +2,7 @@
 Search strategies for bmmpy.
 
 Searchers inspect a RowWindow and return Candidate objects ordered by
-nondecreasing weight. The resulting candidates can then be applied to the same window with GreedySelection or another compatible selector.
+nondecreasing weight. The resulting candidates can then be applied to the same window with GreedyApplier or another compatible selector.
 
 Examples
 --------

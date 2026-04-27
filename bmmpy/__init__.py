@@ -8,7 +8,7 @@ applying row transformations in place.
 
 The usual workflow is to build a BitMatrix, select a RowWindow over the rows of
 interest, run a search strategy to obtain Candidate objects, and then apply the
-best transformations with GreedySelection or a higher-level helper such as
+best transformations with GreedyApplier or a higher-level helper such as
 search_apply.
 
 Examples
@@ -22,7 +22,7 @@ Examples
 >>> result = bmm.search_apply(
 ...     window,
 ...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
-...     selector=bmm.GreedySelection(min_gain=1),
+...     selector=bmm.GreedyApplier(min_gain=1),
 ... )
 >>> result.applied_count >= 1
 True
@@ -45,7 +45,7 @@ from ._bmmpy import (
     get_runtime_features,
     get_version,
 )
-from .apply import GreedySelection
+from .apply import GreedyApplier
 from .candidate import Candidate
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
 from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch, CudaBruteforceSearch
@@ -57,7 +57,7 @@ __all__ = [
     "BruteforceSearch",
     "Candidate",
     "FwhtSearch",
-    "GreedySelection",
+    "GreedyApplier",
     "MatrixErr",
     "MatrixError",
     "MitmFwhtSearch",
