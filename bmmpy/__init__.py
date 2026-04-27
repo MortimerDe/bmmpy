@@ -22,7 +22,7 @@ Examples
 >>> result = bmm.search_apply(
 ...     window,
 ...     searcher=bmm.FwhtSearch(max_rows=16, max_candidates=1),
-...     selector=bmm.GreedyApplier(min_gain=1),
+...     applier=bmm.GreedyApplier(min_gain=1),
 ... )
 >>> result.applied_count >= 1
 True

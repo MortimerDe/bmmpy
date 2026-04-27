@@ -1,7 +1,7 @@
 """
 Apply strategies for bmmpy.
 
-Selectors consume Candidate objects produced for a RowWindow and update the
+Appliers consume Candidate objects produced for a RowWindow and update the
 underlying BitMatrix in place. GreedyApplier is the current built-in strategy
 for accepting beneficial row transformations.
 
@@ -56,7 +56,7 @@ class GreedyApplier:
 
     Notes
     -----
-    This selector mutates the underlying matrix through the provided RowWindow.
+    This applier mutates the underlying matrix through the provided RowWindow.
 
     Examples
     --------
@@ -67,8 +67,8 @@ class GreedyApplier:
     ...     matrix[1, col] = True
     >>> window = matrix.row_window([0, 1])
     >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
-    >>> selector = bmm.GreedyApplier(min_gain=1)
-    >>> result = selector.apply(window, candidates)
+    >>> applier = bmm.GreedyApplier(min_gain=1)
+    >>> result = applier.apply(window, candidates)
     >>> result.applied_count >= 1
     True
     """
