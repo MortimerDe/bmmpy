@@ -5,6 +5,7 @@
 #include "bmmpy/search/bruteforce_search.hpp"
 #include "bmmpy/search/cuda_mitm_fwht_search.hpp"
 #include "bmmpy/search/fwht_search.hpp"
+#include "bmmpy/search/sa_selector.hpp"
 #include "bmmpy/search/searcher.hpp"
 #include "bmmpy/search/split_window_prep.hpp"
 #include "bmmpy/stub.hpp"
@@ -52,6 +53,19 @@ bmmpy::BitMatrix matrix_from_rows(std::initializer_list<std::string_view> rows) 
     }
 
     return matrix;
+}
+
+bmmpy::BitMatrix make_sa_cluster_matrix() {
+    return matrix_from_rows({
+        "111111000000",
+        "111111000000",
+        "111111000000",
+        "111111000000",
+        "000000000000",
+        "000000000000",
+        "000000000000",
+        "000000000000",
+    });
 }
 
 bmmpy::BitMatrix make_cuda_equivalence_matrix(std::size_t rows = 28, std::size_t cols = 96) {
@@ -618,6 +632,53 @@ void test_cuda_bruteforce_supports_4096_width_when_available() {
     require_same_candidates(actual, expected, "cuda_bruteforce supports 4096 width");
 }
 
+void test_sa_selector_is_deterministic_for_same_seed() {
+    const bmmpy::BitMatrix matrix = make_sa_cluster_matrix();
+
+    const bmmpy::SASelector selector({
+        256,
+        8,
+        12345,
+        bmmpy::WindowScorePolicyKind::PairwiseSynergy,
+        bmmpy::CoolingPolicyKind::AdaptiveGeometric,
+        32,
+        0.8,
+        0.99,
+        1e-6,
+    });
+
+    const auto lhs = selector.select(matrix, 4);
+    const auto rhs = selector.select(matrix, 4);
+
+    require(lhs.rows == rhs.rows, "sa selector deterministic rows");
+    require(lhs.score == rhs.score, "sa selector deterministic score");
+    require(lhs.best_iteration == rhs.best_iteration, "sa selector deterministic best_iteration");
+    require(lhs.restart_index == rhs.restart_index, "sa selector deterministic restart");
+}
+
+void test_sa_selector_prefers_dense_cluster() {
+    const bmmpy::BitMatrix matrix = make_sa_cluster_matrix();
+
+    const bmmpy::SASelector selector({
+        256,
+        8,
+        7,
+        bmmpy::WindowScorePolicyKind::PairwiseSynergy,
+        bmmpy::CoolingPolicyKind::AdaptiveGeometric,
+        32,
+        0.8,
+        0.99,
+        1e-6,
+    });
+
+    const auto result = selector.select(matrix, 4);
+    require_eq<std::size_t>(result.rows, {0, 1, 2, 3}, "sa selector best cluster rows");
+    require(result.score == 72, "sa selector best cluster score");
+
+    const auto window = selector.select_window(matrix, 4);
+    require_eq<std::size_t>(window.global_rows(), {0, 1, 2, 3}, "sa selector select_window rows");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -665,6 +726,9 @@ int main() {
          &test_cuda_bruteforce_supports_128_candidates_when_available},
         {"cuda_bruteforce_supports_4096_width_when_available",
          &test_cuda_bruteforce_supports_4096_width_when_available},
+        {"sa_selector_is_deterministic_for_same_seed",
+         &test_sa_selector_is_deterministic_for_same_seed},
+        {"sa_selector_prefers_dense_cluster", &test_sa_selector_prefers_dense_cluster},
     };
 
     for (const TestCase& test : tests) {
