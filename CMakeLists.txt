@@ -57,6 +57,9 @@ target_sources(
         src/search/cuda_mitm_fwht_search.cpp
         src/search/bruteforce_search.cpp
         src/search/cuda_bruteforce_search.cpp
+        src/search/sa_selector.cpp
+        src/search/sa_selector_pairwise.cpp
+        src/search/sa_selector_higher_order.cpp
 )
 
 target_include_directories(

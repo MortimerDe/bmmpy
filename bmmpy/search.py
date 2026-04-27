@@ -32,7 +32,25 @@ from ._bmmpy import (
     FwhtSearchConfig as _NativeFwhtSearchConfig,
     MitmFwhtSearch as _NativeMitmFwhtSearch,
     MitmFwhtSearchConfig as _NativeMitmFwhtSearchConfig,
+    SASelectionResult,
+    SASelector as _NativeSASelector,
+    SASelectorConfig as _NativeSASelectorConfig,
+    CoolingPolicyKind as _NativeCoolingPolicyKind,
+    WindowScorePolicyKind as _NativeWindowScorePolicyKind,
 )
+
+def _resolve_score_policy(name: str):
+    if name == "pairwise_synergy":
+        return _NativeWindowScorePolicyKind.PairwiseSynergy
+    if name == "higher_order_synergy":
+        return _NativeWindowScorePolicyKind.HigherOrderSynergy
+    raise ValueError(f"Unsupported score_policy: {name!r}")
+
+
+def _resolve_cooling_policy(name: str):
+    if name == "adaptive_geometric":
+        return _NativeCoolingPolicyKind.AdaptiveGeometric
+    raise ValueError(f"Unsupported cooling_policy: {name!r}")
 
 class BruteforceSearch:
     """
@@ -395,4 +413,128 @@ class CudaBruteforceSearch:
     def search(self, window: RowWindow) -> list[Candidate]:
         return self._impl.search(window)
 
-__all__ = ["BruteforceSearch", "FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch", "CudaBruteforceSearch"]
+class SASelector:
+    """
+    Select promising row windows using simulated annealing on the CPU.
+
+    Parameters
+    ----------
+    iterations : int, default=10000
+        Number of annealing steps per restart.
+    restarts : int, default=8
+        Number of independent restarts. The best visited state is returned.
+    seed : int, default=0
+        Seed for the native pseudo-random generator.
+    score_policy : str, default="pairwise_synergy"
+        Window scoring policy. Supported values are
+        "pairwise_synergy" and "higher_order_synergy".
+    cooling_policy : str, default="adaptive_geometric"
+        Cooling schedule policy. The current implementation supports only
+        ``"adaptive_geometric"``.
+    temperature_probe_samples : int, default=64
+        Number of sampled negative deltas used to estimate the initial temperature.
+    initial_acceptance_probability : float, default=0.8
+        Target initial acceptance probability for sampled negative moves.
+    cooling_rate : float, default=0.99
+        Geometric cooling multiplier applied after each iteration.
+    min_temperature : float, default=1e-6
+        Lower clamp for the temperature.
+
+    Notes
+    -----
+    This selector is a preprocessing step. It does not run the search itself.
+    Instead, it chooses a row window that is likely to be useful for a downstream
+    search backend.
+
+    Examples
+    --------
+    >>> import bmmpy as bmm
+    >>> matrix = bmm.matrix_from_rows([
+    ...     "111111000000",
+    ...     "111111000000",
+    ...     "111111000000",
+    ...     "111111000000",
+    ...     "000000000000",
+    ...     "000000000000",
+    ... ])
+    >>> selector = bmm.SASelector(iterations=256, restarts=4, seed=7)
+    >>> result = selector.select(matrix, 4)
+    >>> len(result.rows)
+    4
+    >>> window = selector.select_window(matrix, 4)
+    >>> len(window)
+    4
+    """
+
+    __slots__ = (
+        "iterations",
+        "restarts",
+        "seed",
+        "score_policy",
+        "cooling_policy",
+        "temperature_probe_samples",
+        "initial_acceptance_probability",
+        "cooling_rate",
+        "min_temperature",
+        "_impl",
+    )
+
+    def __init__(
+        self,
+        *,
+        iterations: int = 10000,
+        restarts: int = 8,
+        seed: int = 0,
+        score_policy: str = "pairwise_synergy",
+        cooling_policy: str = "adaptive_geometric",
+        temperature_probe_samples: int = 64,
+        initial_acceptance_probability: float = 0.8,
+        cooling_rate: float = 0.99,
+        min_temperature: float = 1e-6,
+    ) -> None:
+        config = _NativeSASelectorConfig()
+        config.iterations = iterations
+        config.restarts = restarts
+        config.seed = seed
+        config.score_policy = _resolve_score_policy(score_policy)
+        config.cooling_policy = _resolve_cooling_policy(cooling_policy)
+        config.temperature_probe_samples = temperature_probe_samples
+        config.initial_acceptance_probability = initial_acceptance_probability
+        config.cooling_rate = cooling_rate
+        config.min_temperature = min_temperature
+
+        self.iterations = iterations
+        self.restarts = restarts
+        self.seed = seed
+        self.score_policy = score_policy
+        self.cooling_policy = cooling_policy
+        self.temperature_probe_samples = temperature_probe_samples
+        self.initial_acceptance_probability = initial_acceptance_probability
+        self.cooling_rate = cooling_rate
+        self.min_temperature = min_temperature
+        self._impl = _NativeSASelector(config)
+
+    def __repr__(self) -> str:
+        return (
+            "SASelector("
+            f"iterations={self.iterations}, "
+            f"restarts={self.restarts}, "
+            f"seed={self.seed}, "
+            f"score_policy={self.score_policy!r}, "
+            f"cooling_policy={self.cooling_policy!r}, "
+            f"temperature_probe_samples={self.temperature_probe_samples}, "
+            f"initial_acceptance_probability={self.initial_acceptance_probability}, "
+            f"cooling_rate={self.cooling_rate}, "
+            f"min_temperature={self.min_temperature})"
+        )
+
+    def name(self) -> str:
+        return self._impl.name()
+
+    def select(self, matrix, window_size: int) -> SASelectionResult:
+        return self._impl.select(matrix, window_size)
+
+    def select_window(self, matrix, window_size: int) -> RowWindow:
+        return self._impl.select_window(matrix, window_size)
+
+__all__ = ["BruteforceSearch", "FwhtSearch", "MitmFwhtSearch", "CudaMitmFwhtSearch", "CudaBruteforceSearch", "SASelector", "SASelectionResult"]

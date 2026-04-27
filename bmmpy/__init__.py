@@ -48,7 +48,7 @@ from ._bmmpy import (
 from .apply import GreedyApplier
 from .candidate import Candidate
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
-from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch, CudaBruteforceSearch
+from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch, CudaBruteforceSearch, SASelector, SASelectionResult
 from .workflows import search_apply
 
 __all__ = [
@@ -65,6 +65,8 @@ __all__ = [
     "CudaBruteforceSearch",
     "RowWindow",
     "RuntimeFeatures",
+    "SASelectionResult",
+    "SASelector",
     "add",
     "algebra",
     "fixed_weight_masks_u32",
