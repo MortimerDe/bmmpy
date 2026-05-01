@@ -33,6 +33,7 @@ void bind_window(nb::module_& m) {
         .def_prop_ro("rows", &::bmmpy::RowWindow::global_rows)
         .def("row_popcount", &::bmmpy::RowWindow::row_popcount, nb::arg("local_row"))
         .def_prop_ro("total_weight", &::bmmpy::RowWindow::total_weight)
+        .def("assign_materialized", &::bmmpy::RowWindow::assign_materialized, nb::arg("rows"))
         .def("materialize", &::bmmpy::RowWindow::materialize, nb::rv_policy::move);
 }
 

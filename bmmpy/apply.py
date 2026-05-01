@@ -2,8 +2,9 @@
 Apply strategies for bmmpy.
 
 Appliers consume Candidate objects produced for a RowWindow and update the
-underlying BitMatrix in place. GreedyApplier is the current built-in strategy
-for accepting beneficial row transformations.
+underlying BitMatrix in place. GreedyApplier is the local step-by-step strategy.
+GlobalGreedyApplier instead greedily assembles a full invertible row transform
+from the provided candidate pool plus identity rows.
 
 Examples
 --------
@@ -27,6 +28,7 @@ from ._bmmpy import (
     ApplyResult,
     Candidate,
     RowWindow,
+    GlobalGreedyApplier as _NativeGlobalGreedyApplier,
     GreedyApplier as _NativeGreedyApplier,
 )
 
@@ -129,4 +131,72 @@ class GreedyApplier:
         return self._impl.apply(window, list(candidates))
 
 
-__all__ = ["GreedyApplier"]
+class GlobalGreedyApplier:
+    """
+    Greedily assemble one full invertible transform from a candidate pool.
+
+    The applier augments the provided candidates with identity rows, sorts the
+    pool by weight, greedily selects a full independent basis in coefficient
+    space, materializes the resulting square transform, and applies it to the
+    window in one shot.
+
+    Parameters
+    ----------
+    require_improvement : bool, default=True
+        If True, apply the transform only when it strictly reduces total row
+        weight. If False, a zero-improvement transform may still be applied.
+    """
+
+    __slots__ = ("require_improvement", "_impl")
+
+    def __init__(self, *, require_improvement: bool = True) -> None:
+        self.require_improvement = require_improvement
+        self._impl = _NativeGlobalGreedyApplier(require_improvement)
+
+    def __repr__(self) -> str:
+        return f"GlobalGreedyApplier(require_improvement={self.require_improvement})"
+
+    def name(self) -> str:
+        return self._impl.name()
+
+    def apply(
+        self,
+        window: RowWindow,
+        candidates: Iterable[Candidate],
+    ) -> ApplyResult:
+        """Apply candidates to the rows in a window.
+
+        Parameters
+        ----------
+        window : RowWindow
+            Window whose underlying matrix rows may be updated.
+        candidates : Iterable[Candidate]
+            Candidate objects to evaluate.
+
+        Returns
+        -------
+        ApplyResult
+            Summary of the accepted applications, including the number of applied
+            updates and the total weight improvement.
+
+        Notes
+        -----
+        The underlying matrix is mutated in place.
+
+        Examples
+        --------
+        >>> import bmmpy as bmm
+        >>> matrix = bmm.BitMatrix(2, 5)
+        >>> for col in (0, 2, 4):
+        ...     matrix[0, col] = True
+        ...     matrix[1, col] = True
+        >>> window = matrix.row_window([0, 1])
+        >>> candidates = bmm.FwhtSearch(max_rows=16, max_candidates=1).search(window)
+        >>> result = bmm.GlobalGreedyApplier(require_improvement=True).apply(window, candidates)
+        >>> result.weight_improvement > 0
+        True
+        """
+        return self._impl.apply(window, list(candidates))
+
+
+__all__ = ["GreedyApplier", "GlobalGreedyApplier"]
