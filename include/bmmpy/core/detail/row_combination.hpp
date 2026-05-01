@@ -1,4 +1,3 @@
-// row_combination.hpp
 #pragma once
 
 #include "bmmpy/core/bit_matrix.hpp"
