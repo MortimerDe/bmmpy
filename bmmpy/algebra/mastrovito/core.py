@@ -1,10 +1,32 @@
-"""Public Mastrovito generator and convenience helpers."""
+"""Public Mastrovito helpers built from the regular representation of GF(2^n).
+
+Let E = (1, x, ..., x^(n-1)) be the standard polynomial basis and let
+B = (b_0, ..., b_{n-1}) be a user-selected coordinate basis.
+
+This module follows the construction
+
+    rho_E(a) = sum_i a_i rho_E(x^i),
+    rho_B(a) = S^{-1} rho_E(a) S,
+
+where S = [b_0 ... b_{n-1}]_E is the change-of-basis matrix.
+
+The implementation is intentionally structured in the same order:
+
+1. build rho_E(1), rho_E(x), ..., rho_E(x^(n-1)),
+2. conjugate that family by S when a custom basis is requested,
+3. assemble rho_B(element) as a GF(2)-linear combination of the transformed
+   family,
+4. use powers of rho_B(element) as Mastrovito blocks.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ...matrix import BitMatrix
 from .bit_algebra import (
-    build_element_matrix,
+    build_standard_power_matrices,
+    combine_power_matrices,
     matrix_power_rows,
     precompute_blocks,
 )
@@ -19,23 +41,46 @@ from .conversions import (
 from .parsing import BasisLike, FieldElementLike, PolynomialLike, parse_poly
 
 
+def _conjugate_rows(
+    rows: Sequence[int],
+    change: BitMatrix,
+    change_inv: BitMatrix,
+    degree: int,
+) -> list[int]:
+    return matrix_to_rows(change_inv @ rows_to_matrix(rows, degree, degree) @ change)
+
+
 class Mastrovito:
-    """Build Mastrovito matrices and parity-check matrices for a fixed polynomial.
+    """Build Mastrovito blocks and parity-check matrices for a fixed polynomial.
 
     Parameters
     ----------
     poly : str | tuple[int, Sequence[int]] | Sequence[int]
         Irreducible polynomial representation.
     basis : Sequence[int | str | Sequence[int]] | None, default=None
-        Ordered basis used for the returned coordinate system. Integers denote
+        Ordered coordinate basis for the returned matrices. Integers denote
         monomials ``x^i``. Strings and sequences denote general field elements
         in polynomial form.
     element : str | Sequence[int], default="x"
-        Non-zero field element used to build the multiplication matrix.
-        Examples: ``"x"``, ``"x^7 + x + 1"``, ``[7, 1, 0]``.
+        Non-zero field element whose multiplication operator defines the block
+        generator. Examples: ``"x"``, ``"x^7 + x + 1"``, ``[7, 1, 0]``.
+
+    Notes
+    -----
+    Field elements are still parsed as polynomials in ``x``. The ``basis``
+    parameter only changes the coordinate system in which the returned matrices
+    are written.
     """
 
-    __slots__ = ("degree", "powers", "element", "_m_alpha", "_period")
+    __slots__ = (
+        "degree",
+        "powers",
+        "basis",
+        "element",
+        "_period",
+        "_power_basis_rows",
+        "_m_alpha",
+    )
 
     def __init__(
         self,
@@ -55,25 +100,45 @@ class Mastrovito:
 
         self.degree = degree
         self.powers = powers
+        self.basis = basis
         self.element = element
         self._period = (1 << degree) - 1
-        self._m_alpha = build_element_matrix(degree, powers, element_bits)
+
+        standard_power_rows = build_standard_power_matrices(degree, powers)
 
         if basis is not None:
             change = build_basis_change_matrix(basis, degree, powers)
             change_inv = invert_matrix(change)
-            self._m_alpha = matrix_to_rows(
-                change_inv @ rows_to_matrix(self._m_alpha, degree, degree) @ change
-            )
+            power_basis_rows = [
+                _conjugate_rows(rows, change, change_inv, degree)
+                for rows in standard_power_rows
+            ]
+        else:
+            power_basis_rows = [list(rows) for rows in standard_power_rows]
+
+        self._power_basis_rows = tuple(tuple(rows) for rows in power_basis_rows)
+
+        self._m_alpha = combine_power_matrices(
+            self._power_basis_rows,
+            element_bits,
+            degree,
+        )
 
     def __repr__(self) -> str:
         return (
             f"Mastrovito(degree={self.degree}, powers={self.powers}, "
-            f"element={self.element!r})"
+            f"basis={self.basis!r}, element={self.element!r})"
         )
 
+    def get_basis_multiplication_matrices(self) -> list[BitMatrix]:
+        """Return [rho_B(1), rho_B(x), ..., rho_B(x^(n-1))]."""
+        return [
+            rows_to_matrix(rows, self.degree, self.degree)
+            for rows in self._power_basis_rows
+        ]
+
     def get_mastrovito_matrix(self, power: int) -> BitMatrix:
-        """Return the degree x degree Mastrovito block for the given power."""
+        """Return rho_B(element^power) as a degree x degree matrix."""
         if not isinstance(power, int):
             raise TypeError("power must be an int")
 
@@ -81,7 +146,7 @@ class Mastrovito:
         return rows_to_matrix(rows, self.degree, self.degree)
 
     def build_check_matrix(self, c: int, k: int, *, start_i: int = 0) -> BitMatrix:
-        """Build a parity-check matrix using Mastrovito blocks.
+        """Build a parity-check matrix with blocks rho_B(element^(step * j)).
 
         Parameters
         ----------

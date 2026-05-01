@@ -4,6 +4,7 @@ import unittest
 import pytest
 import os
 import bmmpy as bmm
+from bmmpy.algebra.mastrovito.conversions import build_basis_change_matrix, invert_matrix
 
 def make_search_matrix() -> bmm.BitMatrix:
     matrix = bmm.BitMatrix(2, 5)
@@ -303,6 +304,22 @@ class PublicApiTests(unittest.TestCase):
         window = selector.select_window(matrix, 4)
         self.assertEqual(window.rows, [0, 1, 2, 3])
         self.assertEqual(window.materialize().to_rows(), ["111111000000"] * 4)
+
+    def test_algebra_mastrovito_basis_change_matches_conjugation(self) -> None:
+        basis = [0, 1, [2, 0]]
+
+        standard = bmm.algebra.Mastrovito("x^3 + x + 1")
+        changed = bmm.algebra.Mastrovito("x^3 + x + 1", basis=basis)
+
+        change = build_basis_change_matrix(basis, 3, [3, 1, 0])
+        change_inv = invert_matrix(change)
+
+        expected_block = change_inv @ standard.get_mastrovito_matrix(1) @ change
+
+        self.assertEqual(
+            changed.get_mastrovito_matrix(1).to_rows(),
+            expected_block.to_rows(),
+        )
 
 if __name__ == "__main__":
     unittest.main()
