@@ -60,6 +60,8 @@ target_sources(
         src/search/sa_selector.cpp
         src/search/sa_selector_pairwise.cpp
         src/search/sa_selector_higher_order.cpp
+
+        src/solver/exact_basis_solver.cpp
 )
 
 target_include_directories(
@@ -168,6 +170,7 @@ nanobind_add_module(
     python/bindings/runtime.cpp
     python/bindings/math.cpp
     python/bindings/window.cpp
+    python/bindings/solver.cpp
 )
 
 nanobind_add_stub(

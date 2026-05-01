@@ -13,5 +13,6 @@ void bind_search(nb::module_& m);
 void bind_apply(nb::module_& m);
 void bind_runtime(nb::module_& m);
 void bind_math(nb::module_& m);
+void bind_solver(nb::module_& m);
 
 } // namespace bmmpy::bindings

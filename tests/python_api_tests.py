@@ -320,6 +320,27 @@ class PublicApiTests(unittest.TestCase):
             changed.get_mastrovito_matrix(1).to_rows(),
             expected_block.to_rows(),
         )
+    
+    def test_exact_basis_solver_finds_min_total_weight_basis(self) -> None:
+        matrix = bmm.matrix_from_rows([
+            "111",
+            "110",
+            "001",
+        ])
+        window = matrix.row_window([0, 1, 2])
+
+        result = bmm.solver.ExactBasisSolver().solve(window)
+
+        self.assertEqual(result.input_rows, 3)
+        self.assertEqual(result.cols, 3)
+        self.assertEqual(result.rank, 2)
+        self.assertEqual(result.enumerated_states, 7)
+        self.assertEqual(result.total_weight, 3)
+        self.assertEqual(sorted(result.basis_weights), [1, 2])
+        self.assertEqual(result.transform_matrix.shape, (2, 3))
+        self.assertEqual(result.basis_matrix.shape, (2, 3))
+        self.assertEqual(result.basis_matrix.rank(), 2)
+        self.assertEqual(result.basis_matrix.weight(), 3)
 
 if __name__ == "__main__":
     unittest.main()

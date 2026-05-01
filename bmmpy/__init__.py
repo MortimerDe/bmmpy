@@ -31,7 +31,7 @@ True
 """
 from __future__ import annotations
 
-from . import algebra
+from . import algebra, solver
 from ._bmmpy import (
     ApplyResult,
     MatrixErr,
@@ -69,6 +69,7 @@ __all__ = [
     "SASelector",
     "add",
     "algebra",
+    "solver",
     "fixed_weight_masks_u32",
     "fixed_weight_masks_u64",
     "fwht_i16",

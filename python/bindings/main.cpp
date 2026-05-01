@@ -16,4 +16,5 @@ NB_MODULE(_bmmpy, m) {
     pyb::bind_apply(m);
     pyb::bind_runtime(m);
     pyb::bind_math(m);
+    pyb::bind_solver(m);
 }
