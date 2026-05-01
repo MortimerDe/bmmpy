@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bmmpy/apply/apply_result.hpp"
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/types/candidate.hpp"
@@ -9,11 +10,6 @@
 #include <vector>
 
 namespace bmmpy {
-
-struct ApplyResult {
-    std::size_t applied_count = 0;
-    std::uint64_t weight_improvement = 0;
-};
 
 class GreedyApplier {
 public:

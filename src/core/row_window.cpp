@@ -99,6 +99,14 @@ void RowWindow::row_xor_from(std::size_t target_local_row,
         global_row(target_local_row), source.matrix(), source.global_row(source_local_row));
 }
 
+void RowWindow::assign_materialized(const BitMatrix& rows) {
+    if (rows.rows() != _global_rows.size()) {
+        throw MatrixError(MatrixErr::DimensionMismatch);
+    }
+    require_mutable_matrix().insert_rows_by_indices(rows, _global_rows);
+    initialize();
+}
+
 BitMatrix RowWindow::materialize() const { return _matrix->extract_rows_by_indices(_global_rows); }
 
 void RowWindow::initialize() {

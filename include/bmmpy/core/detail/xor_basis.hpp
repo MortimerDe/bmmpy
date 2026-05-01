@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -18,6 +20,7 @@ inline std::uint64_t tail_mask_for_bits(const std::size_t bit_count) noexcept {
     const std::size_t tail_bits = bit_count % 64u;
     if (tail_bits == 0)
         return ~std::uint64_t{0};
+
     return (std::uint64_t{1} << tail_bits) - 1;
 }
 
@@ -59,22 +62,53 @@ inline void xor_words_inplace(std::vector<std::uint64_t>& dst,
         dst[i] ^= src[i];
 }
 
+inline bool mask_words_fit_bits(const std::vector<std::uint64_t>& mask_words,
+                                const std::size_t bit_count) noexcept {
+    const std::size_t used_words = word_count_for_bits(bit_count);
+
+    if (used_words == 0) {
+        for (const std::uint64_t word : mask_words) {
+            if (word != 0)
+                return false;
+        }
+        return true;
+    }
+
+    for (std::size_t i = used_words; i < mask_words.size(); ++i) {
+        if (mask_words[i] != 0)
+            return false;
+    }
+
+    if ((bit_count % 64u) != 0 && used_words <= mask_words.size()) {
+        const std::uint64_t overflow_bits =
+            mask_words[used_words - 1] & ~tail_mask_for_bits(bit_count);
+        if (overflow_bits != 0)
+            return false;
+    }
+
+    return true;
+}
+
 inline std::vector<std::uint64_t> normalize_mask_words(const std::vector<std::uint64_t>& mask_words,
                                                        const std::size_t bit_count) {
-    std::vector<std::uint64_t> normalized(word_count_for_bits(bit_count), 0);
+    if (!mask_words_fit_bits(mask_words, bit_count)) {
+        throw std::invalid_argument("mask contains bits outside the supported row range");
+    }
 
+    std::vector<std::uint64_t> normalized(word_count_for_bits(bit_count), 0);
     const std::size_t copy_words = std::min(normalized.size(), mask_words.size());
+
     for (std::size_t i = 0; i < copy_words; ++i)
         normalized[i] = mask_words[i];
-
-    if (!normalized.empty())
-        normalized.back() &= tail_mask_for_bits(bit_count);
 
     return normalized;
 }
 
 inline std::vector<std::uint64_t> make_unit_mask_words(const std::size_t bit_count,
                                                        const std::size_t bit_index) {
+    if (bit_index >= bit_count)
+        throw std::out_of_range("unit mask bit index out of bounds");
+
     std::vector<std::uint64_t> words(word_count_for_bits(bit_count), 0);
     words[bit_index / 64u] = std::uint64_t{1} << (bit_index % 64u);
     return words;
