@@ -341,6 +341,45 @@ class PublicApiTests(unittest.TestCase):
         self.assertEqual(result.basis_matrix.shape, (2, 3))
         self.assertEqual(result.basis_matrix.rank(), 2)
         self.assertEqual(result.basis_matrix.weight(), 3)
+    
+    def test_global_greedy_applier_preserves_rank_and_reduces_weight(self) -> None:
+        matrix = bmm.matrix_from_rows([
+            "111",
+            "110",
+            "001",
+        ])
+        window = matrix.row_window([0, 1, 2])
+
+        candidates = [
+            bmm.Candidate.from_u64(0b011, 1),
+            bmm.Candidate.from_u64(0b101, 2),
+            bmm.Candidate.from_u64(0b110, 3),
+        ]
+
+        before_rank = window.materialize().rank()
+        before_weight = window.materialize().weight()
+
+        result = bmm.GlobalGreedyApplier().apply(window, candidates)
+
+        self.assertEqual(result.applied_count, 1)
+        self.assertGreater(result.weight_improvement, 0)
+        self.assertEqual(window.materialize().rank(), before_rank)
+        self.assertLess(window.materialize().weight(), before_weight)
+
+
+    def test_global_greedy_applier_skips_non_improving_identity_basis(self) -> None:
+        matrix = bmm.matrix_from_rows([
+            "10",
+            "01",
+        ])
+        before = matrix.to_rows()
+
+        window = matrix.row_window([0, 1])
+        result = bmm.GlobalGreedyApplier().apply(window, [])
+
+        self.assertEqual(result.applied_count, 0)
+        self.assertEqual(result.weight_improvement, 0)
+        self.assertEqual(matrix.to_rows(), before)
 
 if __name__ == "__main__":
     unittest.main()

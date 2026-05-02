@@ -1,4 +1,5 @@
 #include "bindings.hpp"
+#include "bmmpy/apply/global_greedy_applier.hpp"
 #include "bmmpy/apply/greedy_applier.hpp"
 #include "bmmpy/core/row_window.hpp"
 
@@ -21,6 +22,13 @@ void bind_apply(nb::module_& m) {
              nb::arg("stochastic") = false,
              nb::arg("seed") = 0)
         .def("apply", &::bmmpy::GreedyApplier::apply, nb::arg("window"), nb::arg("candidates"));
+    nb::class_<::bmmpy::GlobalGreedyApplier>(m, "GlobalGreedyApplier")
+        .def(nb::init<bool>(), nb::arg("require_improvement") = true)
+        .def("name", &::bmmpy::GlobalGreedyApplier::name)
+        .def("apply",
+             &::bmmpy::GlobalGreedyApplier::apply,
+             nb::arg("window"),
+             nb::arg("candidates"));
 }
 
 } // namespace bmmpy::bindings

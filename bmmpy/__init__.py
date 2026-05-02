@@ -45,7 +45,7 @@ from ._bmmpy import (
     get_runtime_features,
     get_version,
 )
-from .apply import GreedyApplier
+from .apply import GlobalGreedyApplier, GreedyApplier
 from .candidate import Candidate
 from .matrix import BitMatrix, RowWindow, matrix_from_rows
 from .search import BruteforceSearch, FwhtSearch, MitmFwhtSearch, CudaMitmFwhtSearch, CudaBruteforceSearch, SASelector, SASelectionResult
@@ -58,6 +58,7 @@ __all__ = [
     "Candidate",
     "FwhtSearch",
     "GreedyApplier",
+    "GlobalGreedyApplier",
     "MatrixErr",
     "MatrixError",
     "MitmFwhtSearch",

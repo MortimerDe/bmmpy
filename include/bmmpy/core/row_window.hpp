@@ -35,7 +35,7 @@ public:
     void row_xor_from(std::size_t target_local_row,
                       const RowWindow& source,
                       std::size_t source_local_row);
-
+    void assign_materialized(const BitMatrix& rows);
     BitMatrix materialize() const;
 
 private:

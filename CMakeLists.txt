@@ -48,6 +48,7 @@ target_sources(
         src/math/fwht_dispatch.cpp
 
         src/apply/greedy_applier.cpp
+        src/apply/global_greedy_applier.cpp
 
         src/search/fwht_search.cpp
         src/search/mitm_fwht_search.cpp
