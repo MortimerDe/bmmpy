@@ -27,6 +27,7 @@ public:
     const std::vector<const std::uint64_t*>& row_ptrs() const noexcept { return _row_ptrs; }
     const std::uint64_t* row_words(std::size_t local_row) const;
     std::uint64_t total_weight() const;
+    std::uint64_t weight() const;
     std::uint64_t row_popcount(std::size_t local_row) const;
     bool get(std::size_t local_row, std::size_t col) const;
 

@@ -57,6 +57,13 @@ std::uint64_t RowWindow::row_popcount(std::size_t local_row) const {
     return _matrix->row_popcount(global_row(local_row));
 }
 
+std::uint64_t RowWindow::weight() const {
+    std::uint64_t total = 0;
+    for (std::size_t local_row = 0; local_row < _global_rows.size(); ++local_row)
+        total += row_popcount(local_row);
+    return total;
+}
+
 std::uint64_t RowWindow::total_weight() const {
     const std::size_t word_count = words_per_row();
     if (_row_ptrs.empty() || word_count == 0)
