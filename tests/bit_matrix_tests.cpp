@@ -408,6 +408,28 @@ void test_row_window_total_weight() {
     require(window.total_weight() == 4, "row window total_weight mismatch");
 }
 
+void test_hash_is_canonical_and_data_sensitive() {
+    BitMatrix canonical(1, 65);
+    canonical.set(0, 0, true);
+    canonical.set(0, 64, true);
+
+    BitMatrix noisy(1, 65);
+    std::array<std::uint64_t, 4> words{};
+    words[0] = 0x1ull;
+    words[1] = 0x1ull | (std::uint64_t{1} << 17u);
+    words[2] = 0xaaaaaaaaaaaaaaaaull;
+    words[3] = 0x5555555555555555ull;
+    noisy.copy_from_words(words.data(), words.size());
+
+    require(canonical.hash() == noisy.hash(),
+            "hash should ignore stride padding and bits beyond logical cols");
+
+    BitMatrix changed = noisy;
+    changed.set(0, 1, true);
+
+    require(changed.hash() != noisy.hash(), "hash should change when a logical matrix bit changes");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -431,6 +453,7 @@ int main() {
         {"row_window_view", &test_row_window_view},
         {"row_window_view", &test_row_window_view},
         {"row_window_total_weight", &test_row_window_total_weight},
+        {"hash_is_canonical_and_data_sensitive", &test_hash_is_canonical_and_data_sensitive},
     };
 
     for (const TestCase& test : tests) {

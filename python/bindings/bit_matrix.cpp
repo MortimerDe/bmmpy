@@ -185,6 +185,7 @@ void bind_bit_matrix(nb::module_& m) {
                 matrix.save_binary(path);
             },
             nb::arg("path"))
+        .def("hash", &::bmmpy::BitMatrix::hash)
         .def_static("from_rows", &matrix_from_rows, nb::arg("rows"), nb::rv_policy::move)
         .def_static("from_text", &matrix_from_text, nb::arg("text"), nb::rv_policy::move)
         .def_static(
