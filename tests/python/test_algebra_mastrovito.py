@@ -75,3 +75,69 @@ class TestAlgebraMastrovito(unittest.TestCase):
             changed.get_mastrovito_matrix(1).to_rows(),
             expected_block.to_rows(),
         )
+    
+    def test_algebra_element_mask_matches_standard_mask_without_basis(self) -> None:
+        from_element = bmm.algebra.Mastrovito("x^8 + x^4 + x^3 + x^2 + 1", element=126)
+        from_mask = bmm.algebra.Mastrovito("x^8 + x^4 + x^3 + x^2 + 1", element_mask=126)
+
+        self.assertEqual(
+            from_element.get_mastrovito_matrix(1).to_rows(),
+            from_mask.get_mastrovito_matrix(1).to_rows(),
+        )
+
+    def test_algebra_element_mask_matches_custom_basis_coordinates(self) -> None:
+        basis = [25, 26, 51, 52, 228, 229, 254, 255]
+        poly = "x^8 + x^4 + x^3 + x^2 + 1"
+
+        from_basis_coordinates = bmm.algebra.Mastrovito(
+            poly,
+            basis=basis,
+            element=[26, 51, 52, 228, 229, 254],
+        )
+        from_mask = bmm.algebra.Mastrovito(
+            poly,
+            basis=basis,
+            element_mask=126,
+        )
+
+        self.assertEqual(
+            from_basis_coordinates.build_check_matrix(64, 56).hash(),
+            from_mask.build_check_matrix(64, 56).hash(),
+        )
+
+    def test_algebra_rejects_both_element_and_element_mask(self) -> None:
+        with self.assertRaises(ValueError):
+            bmm.algebra.Mastrovito(
+                "x^3 + x + 1",
+                element="x",
+                element_mask=0b010,
+            )
+
+    def test_algebra_rejects_element_mask_that_exceeds_degree(self) -> None:
+        with self.assertRaises(ValueError):
+            bmm.algebra.Mastrovito(
+                "x^3 + x + 1",
+                element_mask=0b1000,
+            )
+    
+    def test_algebra_normalizes_element_representations(self) -> None:
+        basis = [25, 26, 51, 52, 228, 229, 254, 255]
+        poly = "x^8 + x^4 + x^3 + x^2 + 1"
+
+        from_element = bmm.algebra.Mastrovito(
+            poly,
+            basis=basis,
+            element=[26, 51, 52, 228, 229, 254],
+        )
+        from_mask = bmm.algebra.Mastrovito(
+            poly,
+            basis=basis,
+            element_mask=126,
+        )
+
+        self.assertEqual(from_element.element, [7, 6, 4, 0])
+        self.assertEqual(from_mask.element, [7, 6, 4, 0])
+        self.assertEqual(from_element.element_mask, 126)
+        self.assertEqual(from_mask.element_mask, 126)
+        self.assertEqual(from_element.element_standard_mask, 209)
+        self.assertEqual(from_mask.element_standard_mask, 209)

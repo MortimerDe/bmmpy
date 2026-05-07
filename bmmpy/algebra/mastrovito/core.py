@@ -31,14 +31,16 @@ from .bit_algebra import (
     precompute_blocks,
 )
 from .conversions import (
+    basis_mask_to_field_element,
     build_basis_change_matrix,
+    field_element_to_basis_mask,
     field_element_to_int,
     invert_matrix,
     matrix_to_rows,
     rows_to_matrix,
     write_block,
 )
-from .parsing import BasisLike, FieldElementLike, PolynomialLike, parse_poly
+from .parsing import BasisLike, FieldElementLike, PolynomialLike, parse_field_element, parse_poly
 
 
 def _conjugate_rows(
@@ -59,24 +61,31 @@ class Mastrovito:
         Irreducible polynomial representation.
     basis : Sequence[int | str | Sequence[int]] | None, default=None
         Ordered coordinate basis for the returned matrices. Integers denote
-        monomials ``x^i``. Strings and sequences denote general field elements
+        monomials `x^i`. Strings and sequences denote general field elements
         in polynomial form.
-    element : str | Sequence[int], default="x"
-        Non-zero field element whose multiplication operator defines the block
-        generator. Examples: ``"x"``, ``"x^7 + x + 1"``, ``[7, 1, 0]``.
+    element : int | str | Sequence[int] | None, default=None
+        Non-zero field element in the standard polynomial basis.
+    element_mask : int | None, default=None
+        Bitmask of coordinates in the active basis. When `basis` is None,
+        this is interpreted in the standard polynomial basis.
 
     Notes
     -----
-    Field elements are still parsed as polynomials in ``x``. The ``basis``
-    parameter only changes the coordinate system in which the returned matrices
-    are written.
-    """
+    Exactly one of element and element_mask may be passed. If neither is
+    provided, the default generator element is x.
 
+    The instance normalizes the generator into two coordinate systems:
+        - element_standard_mask: coordinates in the standard polynomial basis
+        - element_mask: coordinates in the active basis
+    """
+        
     __slots__ = (
         "degree",
         "powers",
         "basis",
         "element",
+        "element_mask",
+        "element_standard_mask",
         "_period",
         "_power_basis_rows",
         "_m_alpha",
@@ -87,28 +96,59 @@ class Mastrovito:
         poly: PolynomialLike,
         *,
         basis: BasisLike | None = None,
-        element: FieldElementLike = "x",
+        element: FieldElementLike | None = None,
+        element_mask: int | None = None,
     ) -> None:
         degree, powers = parse_poly(poly)
 
         if degree <= 0:
             raise ValueError("Polynomial degree must be positive")
 
-        element_bits = field_element_to_int(element, degree, powers)
+        if element is not None and element_mask is not None:
+            raise ValueError("Pass either element or element_mask, not both")
+
+        if element is None and element_mask is None:
+            element = "x"
+
+        change = None
+        change_inv = None
+        if basis is not None:
+            change = build_basis_change_matrix(basis, degree, powers)
+            change_inv = invert_matrix(change)
+
+        if element_mask is not None:
+            element_bits = basis_mask_to_field_element(
+                element_mask,
+                basis,
+                degree,
+                powers,
+            )
+        else:
+            element_bits = field_element_to_int(element, degree, powers)
+
         if element_bits == 0:
             raise ValueError("element must be non-zero")
+
+        resolved_element_mask = field_element_to_basis_mask(
+            element_bits,
+            basis,
+            degree,
+            powers,
+            change_inv=change_inv,
+        )
+        normalized_element = parse_field_element(element_bits)
 
         self.degree = degree
         self.powers = powers
         self.basis = basis
-        self.element = element
+        self.element = normalized_element
+        self.element_mask = resolved_element_mask
+        self.element_standard_mask = element_bits
         self._period = (1 << degree) - 1
 
         standard_power_rows = build_standard_power_matrices(degree, powers)
 
-        if basis is not None:
-            change = build_basis_change_matrix(basis, degree, powers)
-            change_inv = invert_matrix(change)
+        if change is not None and change_inv is not None:
             power_basis_rows = [
                 _conjugate_rows(rows, change, change_inv, degree)
                 for rows in standard_power_rows
@@ -127,7 +167,9 @@ class Mastrovito:
     def __repr__(self) -> str:
         return (
             f"Mastrovito(degree={self.degree}, powers={self.powers}, "
-            f"basis={self.basis!r}, element={self.element!r})"
+            f"basis={self.basis!r}, element={self.element!r}, "
+            f"element_mask={self.element_mask!r}, "
+            f"element_standard_mask={self.element_standard_mask!r})"
         )
 
     def get_basis_multiplication_matrices(self) -> list[BitMatrix]:
@@ -202,9 +244,15 @@ def build_check_matrix(
     *,
     start_i: int = 0,
     basis: BasisLike | None = None,
-    element: FieldElementLike = "x",
+    element: FieldElementLike | None = None,
+    element_mask: int | None = None,
 ) -> BitMatrix:
-    generator = Mastrovito(poly, basis=basis, element=element)
+    generator = Mastrovito(
+        poly,
+        basis=basis,
+        element=element,
+        element_mask=element_mask,
+    )
     return generator.build_check_matrix(c, k, start_i=start_i)
 
 
@@ -213,9 +261,15 @@ def get_mastrovito_matrix(
     power: int,
     *,
     basis: BasisLike | None = None,
-    element: FieldElementLike = "x",
+    element: FieldElementLike | None = None,
+    element_mask: int | None = None,
 ) -> BitMatrix:
-    generator = Mastrovito(poly, basis=basis, element=element)
+    generator = Mastrovito(
+        poly,
+        basis=basis,
+        element=element,
+        element_mask=element_mask,
+    )
     return generator.get_mastrovito_matrix(power)
 
 
