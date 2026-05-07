@@ -203,11 +203,78 @@ target_link_libraries(cli PRIVATE bmmpy_core)
 
 # Tests
 if(BUILD_TESTING)
-    add_executable(bit_matrix_tests tests/bit_matrix_tests.cpp)
-    target_link_libraries(bit_matrix_tests PRIVATE bmmpy_core)
-    add_test(NAME bit_matrix_tests COMMAND bit_matrix_tests)
+    function(bmmpy_add_cpp_test target)
+        add_executable(${target} ${ARGN})
+        target_link_libraries(${target} PRIVATE bmmpy_core)
+        target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/support")
+        add_test(NAME ${target} COMMAND ${target})
+    endfunction()
 
-    add_executable(math_tests tests/math_tests.cpp)
-    target_link_libraries(math_tests PRIVATE bmmpy_core)
-    add_test(NAME math_tests COMMAND math_tests)
+    bmmpy_add_cpp_test(
+        bit_matrix_core_tests
+        tests/cpp/bit_matrix_storage_tests.cpp
+        tests/cpp/bit_matrix_rows_tests.cpp
+        tests/cpp/bit_matrix_io_tests.cpp
+        tests/cpp/bit_matrix_hash_tests.cpp
+    )
+    set_tests_properties(bit_matrix_core_tests PROPERTIES LABELS "cpp;bit_matrix")
+
+    bmmpy_add_cpp_test(
+        math_core_tests
+        tests/cpp/fwht_tests.cpp
+    )
+    set_tests_properties(math_core_tests PROPERTIES LABELS "cpp;math")
+
+    bmmpy_add_cpp_test(
+        search_cpu_tests
+        tests/cpp/search_cpu_tests.cpp
+        tests/cpp/sa_selector_tests.cpp
+    )
+    set_tests_properties(search_cpu_tests PROPERTIES LABELS "cpp;search")
+
+    bmmpy_add_cpp_test(
+        search_cuda_tests
+        tests/cpp/search_cuda_tests.cpp
+    )
+    set_tests_properties(search_cuda_tests PROPERTIES LABELS "cpp;search;cuda" RESOURCE_LOCK "gpu")
+
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -c "import pytest"
+        RESULT_VARIABLE BMMPY_HAS_PYTEST
+        OUTPUT_QUIET
+        ERROR_QUIET
+    )
+
+    if(BMMPY_HAS_PYTEST EQUAL 0)
+        set(BMMPY_TEST_PYTHON_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-python")
+
+        add_custom_command(
+            TARGET _bmmpy POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${BMMPY_TEST_PYTHON_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${BMMPY_TEST_PYTHON_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy"
+                    "${BMMPY_TEST_PYTHON_DIR}/bmmpy"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:_bmmpy>"
+                    "${BMMPY_TEST_PYTHON_DIR}/bmmpy/"
+            COMMENT "Staging build-tree bmmpy package for pytest"
+        )
+
+        add_test(
+            NAME python_api_tests
+            COMMAND ${CMAKE_COMMAND} -E env
+                    "PYTHONPATH=${BMMPY_TEST_PYTHON_DIR}"
+                    "BMMPY_EXPECT_CUDA_COMPILED=$<IF:$<BOOL:${BMMPY_ENABLE_CUDA}>,ON,OFF>"
+                    ${Python_EXECUTABLE} -m pytest -q "${CMAKE_CURRENT_SOURCE_DIR}/tests/python"
+        )
+        set_tests_properties(
+            python_api_tests
+            PROPERTIES
+                LABELS "python;api"
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
+    else()
+        message(STATUS "pytest not available in ${Python_EXECUTABLE}; skipping Python tests")
+    endif()
 endif()
