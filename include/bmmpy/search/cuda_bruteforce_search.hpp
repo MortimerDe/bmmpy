@@ -20,8 +20,8 @@ public:
     const char* name() const noexcept override { return "cuda_bruteforce"; }
 
 private:
-    static constexpr std::size_t kMinRows = 16;
-    static constexpr std::size_t kMaxRows = 64;
+    static constexpr std::size_t k_min_rows = 16;
+    static constexpr std::size_t k_max_rows = 64;
 
     CudaBruteforceSearchConfig _config;
 };

@@ -11,32 +11,26 @@
 namespace bmmpy {
 namespace {
 
-constexpr std::size_t kParallelThreshold = std::size_t(1) << 17;
+constexpr std::size_t k_parallel_threshold = std::size_t(1) << 17;
 
 bool is_power_of_two(std::size_t value) noexcept {
     return value != 0 && (value & (value - 1)) == 0;
 }
 
-template <typename T>
-using CombFn = void (*)(T* left, T* right, std::size_t len) noexcept;
+template <typename T> using CombFn = void (*)(T* left, T* right, std::size_t len) noexcept;
 
 template <typename T> CombFn<T> select_comb();
 
-template <> CombFn<std::int16_t> select_comb<std::int16_t>() {
-    return detail::fwht_ops().comb_i16;
-}
+template <> CombFn<std::int16_t> select_comb<std::int16_t>() { return detail::fwht_ops().comb_i16; }
 
-template <> CombFn<std::int32_t> select_comb<std::int32_t>() {
-    return detail::fwht_ops().comb_i32;
-}
+template <> CombFn<std::int32_t> select_comb<std::int32_t>() { return detail::fwht_ops().comb_i32; }
 
 template <typename T> void fwht_inplace_impl(T* data, std::size_t size) {
     if (size <= 1)
         return;
 
     if (!is_power_of_two(size))
-        throw std::invalid_argument(
-            "fwht_inplace: size must be a power of two");
+        throw std::invalid_argument("fwht_inplace: size must be a power of two");
 
     const auto comb = select_comb<T>();
 
@@ -45,13 +39,11 @@ template <typename T> void fwht_inplace_impl(T* data, std::size_t size) {
         const std::size_t step = len * 2;
         const std::size_t blocks = size / step;
 
-        if (size >= kParallelThreshold) {
+        if (size >= k_parallel_threshold) {
 #if defined(_OPENMP)
 #pragma omp parallel for schedule(static)
 #endif
-            for (std::ptrdiff_t block = 0;
-                 block < static_cast<std::ptrdiff_t>(blocks);
-                 ++block) {
+            for (std::ptrdiff_t block = 0; block < static_cast<std::ptrdiff_t>(blocks); ++block) {
                 T* chunk = data + static_cast<std::size_t>(block) * step;
                 comb(chunk, chunk + len, len);
             }
@@ -73,8 +65,7 @@ void calc_scores_and_order_impl(const ScoreT* h,
                                 std::int32_t* cnt,
                                 std::int32_t* off) {
     if (n < 0)
-        throw std::invalid_argument(
-            "calc_scores_and_order: n must be non-negative");
+        throw std::invalid_argument("calc_scores_and_order: n must be non-negative");
 
     const std::size_t bucket_count = static_cast<std::size_t>(n) + 1;
     std::fill(cnt, cnt + bucket_count, 0);
@@ -101,8 +92,7 @@ void calc_scores_and_order_impl(const ScoreT* h,
         off[v + 1] = off[v] + cnt[v];
 
     for (std::size_t u = 1; u < m; ++u) {
-        const auto su =
-            static_cast<std::size_t>(static_cast<std::int32_t>(s_by_mask[u]));
+        const auto su = static_cast<std::size_t>(static_cast<std::int32_t>(s_by_mask[u]));
         const std::int32_t pos = off[su];
         off[su] = pos + 1;
         order[static_cast<std::size_t>(pos)] = static_cast<std::int32_t>(u);
@@ -111,13 +101,9 @@ void calc_scores_and_order_impl(const ScoreT* h,
 
 } // namespace
 
-void fwht_inplace(std::int16_t* data, std::size_t size) {
-    fwht_inplace_impl(data, size);
-}
+void fwht_inplace(std::int16_t* data, std::size_t size) { fwht_inplace_impl(data, size); }
 
-void fwht_inplace(std::int32_t* data, std::size_t size) {
-    fwht_inplace_impl(data, size);
-}
+void fwht_inplace(std::int32_t* data, std::size_t size) { fwht_inplace_impl(data, size); }
 
 void calc_scores_and_order(const std::int16_t* h,
                            std::size_t m,

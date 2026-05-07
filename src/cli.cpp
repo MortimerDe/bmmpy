@@ -10,7 +10,7 @@
 #include <random>
 #include <vector>
 
-std::vector<std::size_t> getRandomIndices(std::size_t N, std::size_t count = 28) {
+std::vector<std::size_t> get_random_indices(std::size_t N, std::size_t count = 28) {
     std::vector<std::size_t> all_indices(N);
     std::iota(all_indices.begin(), all_indices.end(), 0);
 
@@ -35,7 +35,7 @@ int main() {
 
     bmmpy::BitMatrix bm = bmmpy::BitMatrix::load_text("___matrix.txt");
 
-    std::vector<std::size_t> rows = getRandomIndices(bm.rows(), 28);
+    std::vector<std::size_t> rows = get_random_indices(bm.rows(), 28);
     auto window = bm.row_window(rows);
     std::cout << "window rows: " << window.materialize().weight() << std::endl;
     bmmpy::CudaMitmFwhtSearch searcher({64, 0});

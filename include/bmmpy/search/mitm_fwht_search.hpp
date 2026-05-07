@@ -26,8 +26,8 @@ public:
     const char* name() const noexcept override { return "mitm_fwht"; }
 
 private:
-    static constexpr std::size_t kMaxLowBits = 30;
-    static constexpr std::size_t kMaxHalfBits = 31;
+    static constexpr std::size_t k_max_low_bits = 30;
+    static constexpr std::size_t k_max_half_bits = 31;
 
     static std::pair<std::size_t, std::size_t> get_split_info(std::size_t t) noexcept;
 

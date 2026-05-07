@@ -27,7 +27,7 @@ SASelectionResult SASelector::select(const BitMatrix& matrix, std::size_t window
     }
 
     SASelectionResult out;
-    out.seed = (_config.seed == 0 ? sa_detail::kDefaultSeed : _config.seed);
+    out.seed = (_config.seed == 0 ? sa_detail::k_default_seed : _config.seed);
 
     if (window_size == 0)
         return out;

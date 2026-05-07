@@ -21,13 +21,13 @@ using cuda_launch_detail::ensure_result_buffers;
 using cuda_launch_detail::insert_topk;
 using cuda_launch_detail::kMaxCandidates;
 
-constexpr int kThreadsPerBlock = 256;
-constexpr int kWarpSize = 32;
-constexpr int kWarpCount = kThreadsPerBlock / kWarpSize;
-constexpr std::size_t kMaxSpecializedLowBits = 15;
+constexpr int k_threads_per_block = 256;
+constexpr int k_warp_size = 32;
+constexpr int k_warp_count = k_threads_per_block / k_warp_size;
+constexpr std::size_t k_max_specialized_low_bits = 15;
 
-static_assert(kThreadsPerBlock % kWarpSize == 0,
-              "kThreadsPerBlock must be a multiple of warp size");
+static_assert(k_threads_per_block % k_warp_size == 0,
+              "k_threads_per_block must be a multiple of warp size");
 
 struct HostGroupedPlan {
     std::size_t low_bits = 0;
@@ -119,12 +119,12 @@ __global__ void sweep_persistent_kernel(const std::uint32_t* __restrict__ r_offs
 
     __shared__ DeviceTopKEntry shared_best[KStatic];
     __shared__ int shared_best_size;
-    __shared__ DeviceTopKEntry warp_best[kWarpCount][KStatic];
-    __shared__ int warp_best_size[kWarpCount];
-    __shared__ DeviceTopKEntry warp_stage[kWarpCount][kWarpSize];
+    __shared__ DeviceTopKEntry warp_best[k_warp_count][KStatic];
+    __shared__ int warp_best_size[k_warp_count];
+    __shared__ DeviceTopKEntry warp_stage[k_warp_count][k_warp_size];
 
-    const int warp_id = static_cast<int>(threadIdx.x) / kWarpSize;
-    const int lane_id = static_cast<int>(threadIdx.x) % kWarpSize;
+    const int warp_id = static_cast<int>(threadIdx.x) / k_warp_size;
+    const int lane_id = static_cast<int>(threadIdx.x) % k_warp_size;
 
     if (threadIdx.x == 0)
         shared_best_size = 0;
@@ -153,8 +153,9 @@ __global__ void sweep_persistent_kernel(const std::uint32_t* __restrict__ r_offs
             warp_best_size[warp_id] = 0;
         __syncthreads();
 
-        for (std::uint32_t y_base = static_cast<std::uint32_t>(warp_id * kWarpSize); y_base < n_low;
-             y_base += static_cast<std::uint32_t>(kWarpCount * kWarpSize)) {
+        for (std::uint32_t y_base = static_cast<std::uint32_t>(warp_id * k_warp_size);
+             y_base < n_low;
+             y_base += static_cast<std::uint32_t>(k_warp_count * k_warp_size)) {
             const std::uint32_t y = y_base + static_cast<std::uint32_t>(lane_id);
 
             DeviceTopKEntry candidate{0, 0};
@@ -176,7 +177,7 @@ __global__ void sweep_persistent_kernel(const std::uint32_t* __restrict__ r_offs
             __syncwarp();
 
             if (lane_id == 0) {
-                for (int lane = 0; lane < kWarpSize; ++lane) {
+                for (int lane = 0; lane < k_warp_size; ++lane) {
                     insert_topk<KStatic>(
                         warp_best[warp_id], warp_best_size[warp_id], warp_stage[warp_id][lane]);
                 }
@@ -193,7 +194,7 @@ __global__ void sweep_persistent_kernel(const std::uint32_t* __restrict__ r_offs
             for (int i = 0; i < local_size; ++i)
                 best_local[i] = shared_best[i];
 
-            for (int warp = 0; warp < kWarpCount; ++warp) {
+            for (int warp = 0; warp < k_warp_count; ++warp) {
                 for (int i = 0; i < warp_best_size[warp]; ++i) {
                     insert_topk<KStatic>(best_local, local_size, warp_best[warp][i]);
                 }
@@ -315,7 +316,7 @@ std::size_t recommend_persistent_blocks(const std::uint64_t high_state_count,
     int active_blocks_per_sm = 0;
     check_cuda(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&active_blocks_per_sm,
                                                              sweep_persistent_kernel<LowBits>,
-                                                             kThreadsPerBlock,
+                                                             k_threads_per_block,
                                                              static_cast<int>(shared_bytes)),
                "cudaOccupancyMaxActiveBlocksPerMultiprocessor");
 
@@ -341,7 +342,7 @@ void launch_sweep_kernel(const HostGroupedPlan& plan,
     ensure_result_buffers(workspace.results, persistent_blocks * k, k);
 
     sweep_persistent_kernel<LowBits>
-        <<<static_cast<unsigned int>(persistent_blocks), kThreadsPerBlock, shared_bytes>>>(
+        <<<static_cast<unsigned int>(persistent_blocks), k_threads_per_block, shared_bytes>>>(
             workspace.d_r_offsets,
             workspace.d_q,
             workspace.d_multiplicity,
@@ -465,7 +466,7 @@ std::vector<CudaMitmFwhtResult> run_cuda_mitm_fwht_search(const CompactSplitWind
         throw std::invalid_argument("run_cuda_mitm_fwht_search: max_candidates must be <= 128");
     }
 
-    if (prep.low_bits == 0 || prep.low_bits > kMaxSpecializedLowBits) {
+    if (prep.low_bits == 0 || prep.low_bits > k_max_specialized_low_bits) {
         throw std::invalid_argument(
             "run_cuda_mitm_fwht_search: low_bits must be in the specialized CUDA range [1, 15]");
     }

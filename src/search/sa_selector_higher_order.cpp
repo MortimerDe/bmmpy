@@ -21,7 +21,7 @@ void for_each_set_bit(const std::uint64_t* row_words,
 
         while (word != 0) {
             const std::size_t bit = static_cast<std::size_t>(detail::ctz64(word));
-            fn(word_index * kWordBits + bit);
+            fn(word_index * k_word_bits + bit);
             word &= (word - 1);
         }
     }
@@ -74,7 +74,7 @@ std::int64_t compute_swap_delta(const BitMatrix& matrix,
         std::uint64_t removed = out_word & ~in_word;
         while (removed != 0) {
             const std::size_t bit = static_cast<std::size_t>(detail::ctz64(removed));
-            const std::size_t col = word_index * kWordBits + bit;
+            const std::size_t col = word_index * k_word_bits + bit;
             const std::uint32_t n = column_counts[col];
             delta += higher_order_score_term(n - 1) - higher_order_score_term(n);
             removed &= (removed - 1);
@@ -83,7 +83,7 @@ std::int64_t compute_swap_delta(const BitMatrix& matrix,
         std::uint64_t added = in_word & ~out_word;
         while (added != 0) {
             const std::size_t bit = static_cast<std::size_t>(detail::ctz64(added));
-            const std::size_t col = word_index * kWordBits + bit;
+            const std::size_t col = word_index * k_word_bits + bit;
             const std::uint32_t n = column_counts[col];
             delta += higher_order_score_term(n + 1) - higher_order_score_term(n);
             added &= (added - 1);
@@ -114,7 +114,7 @@ void apply_swap(const BitMatrix& matrix,
         std::uint64_t removed = out_word & ~in_word;
         while (removed != 0) {
             const std::size_t bit = static_cast<std::size_t>(detail::ctz64(removed));
-            const std::size_t col = word_index * kWordBits + bit;
+            const std::size_t col = word_index * k_word_bits + bit;
             --column_counts[col];
             removed &= (removed - 1);
         }
@@ -122,7 +122,7 @@ void apply_swap(const BitMatrix& matrix,
         std::uint64_t added = in_word & ~out_word;
         while (added != 0) {
             const std::size_t bit = static_cast<std::size_t>(detail::ctz64(added));
-            const std::size_t col = word_index * kWordBits + bit;
+            const std::size_t col = word_index * k_word_bits + bit;
             ++column_counts[col];
             added &= (added - 1);
         }

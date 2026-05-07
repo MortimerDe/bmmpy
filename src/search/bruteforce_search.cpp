@@ -19,7 +19,7 @@
 namespace bmmpy {
 namespace {
 
-constexpr std::size_t kAutoChunkBits = 12;
+constexpr std::size_t k_auto_chunk_bits = 12;
 
 struct TopKEntry {
     std::uint64_t mask = 0;
@@ -112,7 +112,7 @@ private:
 
 std::size_t resolve_chunk_bits(const std::size_t t, const std::size_t configured_chunk_bits) {
     if (configured_chunk_bits == 0)
-        return std::min<std::size_t>(t, kAutoChunkBits);
+        return std::min<std::size_t>(t, k_auto_chunk_bits);
 
     if (configured_chunk_bits > t || configured_chunk_bits >= Candidate::k_word_bits) {
         throw std::invalid_argument(
