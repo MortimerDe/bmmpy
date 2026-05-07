@@ -33,19 +33,6 @@ cli: build ## Run the CLI executable
 dev: ## Install editable Python package.
 	CMAKE_ARGS="$(CMAKE_ARGS)" $(PIP) install -e .
 
-test: build ## Run C++ tests
-	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
-
-test-py: ## Run Python API tests (repeat ENABLE_CUDA here if the editable install was built with CUDA)
-	$(MAKE) dev
-	BMMPY_EXPECT_CUDA_COMPILED=$(ENABLE_CUDA) \
-	$(PYTHON) -m pytest tests/python_api_tests.py -v
-
-test-py-cuda: ## Reinstall editable package with CUDA and run Python API tests
-	$(MAKE) dev ENABLE_CUDA=ON
-	BMMPY_EXPECT_CUDA_COMPILED=ON \
-	$(PYTHON) -m pytest tests/python_api_tests.py -v
-
 stubs: configure ## Generate Python stubs
 	$(CMAKE) --build $(BUILD_DIR) --target bmmpy_stub
 
@@ -83,3 +70,19 @@ bump_ver: ## Bump project version
 release: ## Publish a release, e.g. make release VERSION=0.3.1
 	@[ -n "$(VERSION)" ] || (echo "VERSION is required"; exit 1)
 	$(PYTHON) scripts/release.py create $(VERSION) --push
+
+## Tests
+test: build ## Run all tests via CTest
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure
+
+test-cpp: build ## Run only native C++ tests
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure -L cpp
+
+test-py: build ## Run only Python tests registered in CTest
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure -L python
+
+test-fast: build ## Run everything except CUDA-labelled tests
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure -LE cuda
+
+test-cuda: build ## Run only CUDA-labelled tests
+	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure -L cuda

@@ -55,6 +55,67 @@ def field_element_to_int(
     return powers_to_field_element(powers, degree, poly_powers)
 
 
+def basis_mask_to_field_element(
+    mask: int,
+    basis: BasisLike | None,
+    degree: int,
+    poly_powers: Sequence[int],
+) -> int:
+    if isinstance(mask, bool) or not isinstance(mask, int):
+        raise TypeError("element_mask must be an int")
+    if mask < 0:
+        raise ValueError("element_mask must be non-negative")
+    if mask >> degree:
+        raise ValueError("element_mask requires more basis coordinates than available")
+
+    if basis is None:
+        return mask
+
+    if isinstance(basis, (str, bytes, bytearray)):
+        raise TypeError("basis must be a sequence of basis elements, not a single string")
+    if len(basis) != degree:
+        raise ValueError(f"basis must contain exactly {degree} elements")
+
+    value = 0
+    bits = mask
+
+    while bits:
+        low_bit = bits & -bits
+        bit_index = low_bit.bit_length() - 1
+        value ^= basis_element_to_int(basis[bit_index], degree, poly_powers)
+        bits ^= low_bit
+
+    return value
+
+def field_element_to_basis_mask(
+    element_bits: int,
+    basis: BasisLike | None,
+    degree: int,
+    poly_powers: Sequence[int],
+    *,
+    change_inv: BitMatrix | None = None,
+) -> int:
+    if isinstance(element_bits, bool) or not isinstance(element_bits, int):
+        raise TypeError("element_bits must be an int")
+    if element_bits < 0:
+        raise ValueError("element_bits must be non-negative")
+    if element_bits >> degree:
+        raise ValueError("element_bits requires more standard basis coordinates than available")
+
+    if basis is None:
+        return element_bits
+
+    if change_inv is None:
+        change = build_basis_change_matrix(basis, degree, poly_powers)
+        change_inv = invert_matrix(change)
+
+    mask = 0
+    for row_index, row_bits in enumerate(matrix_to_rows(change_inv)):
+        if ((row_bits & element_bits).bit_count() & 1) != 0:
+            mask |= 1 << row_index
+
+    return mask
+
 def basis_element_to_int(
     element: BasisElementLike,
     degree: int,
@@ -106,7 +167,9 @@ def invert_matrix(matrix: BitMatrix) -> BitMatrix:
 
 __all__ = [
     "basis_element_to_int",
+    "basis_mask_to_field_element",
     "build_basis_change_matrix",
+    "field_element_to_basis_mask",
     "field_element_to_int",
     "invert_matrix",
     "matrix_to_rows",

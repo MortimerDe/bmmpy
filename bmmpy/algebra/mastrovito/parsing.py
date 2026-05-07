@@ -6,8 +6,8 @@ from collections.abc import Sequence
 from typing import TypeAlias
 
 PolynomialLike: TypeAlias = str | tuple[int, Sequence[int]] | Sequence[int]
-FieldElementLike: TypeAlias = str | Sequence[int]
-BasisElementLike: TypeAlias = int | FieldElementLike
+FieldElementLike: TypeAlias = int | str | Sequence[int]
+BasisElementLike: TypeAlias = int | str | FieldElementLike
 BasisLike: TypeAlias = Sequence[BasisElementLike]
 
 
@@ -55,19 +55,34 @@ def parse_poly(poly: PolynomialLike) -> tuple[int, list[int]]:
 
 
 def parse_field_element(element: FieldElementLike) -> list[int]:
+    if isinstance(element, bool):
+        raise TypeError("element must be an int bitmask, polynomial string, or sequence of powers")
+
+    if isinstance(element, int):
+        return _parse_field_element_int(element)
+
     if isinstance(element, str):
         return _parse_field_element_string(element)
 
     if isinstance(element, Sequence) and not isinstance(element, (bytes, bytearray, str)):
         return _normalize_field_element_powers(element)
 
-    raise TypeError("element must be a polynomial string or sequence of powers")
+    raise TypeError("element must be an int bitmask, polynomial string, or sequence of powers")
 
 
 def _parse_poly_string(poly: str) -> tuple[int, list[int]]:
     powers = _parse_symbolic_powers(poly, label="Polynomial", allow_zero=False)
     return _normalize_powers(powers)
 
+def _parse_field_element_int(element: int) -> list[int]:
+    if element < 0:
+        raise ValueError("field element integer must be non-negative")
+
+    return [
+        bit
+        for bit in range(element.bit_length() - 1, -1, -1)
+        if (element >> bit) & 1
+    ]
 
 def _parse_field_element_string(element: str) -> list[int]:
     powers = _parse_symbolic_powers(element, label="Field element", allow_zero=True)

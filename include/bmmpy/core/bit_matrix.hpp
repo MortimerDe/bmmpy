@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <iosfwd>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace bmmpy {
@@ -71,6 +72,7 @@ public:
 
     void swap_rows(std::size_t r1, std::size_t r2) noexcept;
     std::size_t rank() const;
+    std::string hash() const;
 
     RowWindow row_window(const std::vector<std::size_t>& rows);
     RowWindow row_window(const std::vector<std::size_t>& rows) const;
