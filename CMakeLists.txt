@@ -39,6 +39,10 @@ target_sources(
 
         src/core/row_window.cpp
         src/core/bit_matrix.cpp
+        src/core/bit_matrix_algebra.cpp
+        src/core/bit_matrix_hash.cpp
+        src/core/bit_matrix_rows.cpp
+        src/core/bit_matrix_io.cpp
         src/core/bit_ops_scalar.cpp
         src/core/bit_ops_dispatch.cpp
 
