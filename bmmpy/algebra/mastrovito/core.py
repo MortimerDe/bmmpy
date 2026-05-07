@@ -9,47 +9,29 @@ This module follows the construction
     rho_B(a) = S^{-1} rho_E(a) S,
 
 where S = [b_0 ... b_{n-1}]_E is the change-of-basis matrix.
-
-The implementation is intentionally structured in the same order:
-
-1. build rho_E(1), rho_E(x), ..., rho_E(x^(n-1)),
-2. conjugate that family by S when a custom basis is requested,
-3. assemble rho_B(element) as a GF(2)-linear combination of the transformed
-   family,
-4. use powers of rho_B(element) as Mastrovito blocks.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
-from ...matrix import BitMatrix
-from .bit_algebra import (
-    build_standard_power_matrices,
-    combine_power_matrices,
-    matrix_power_rows,
-    precompute_blocks,
-)
+from ..._bmmpy import BitVector as _NativeBitVector, MastrovitoCore as _NativeMastrovitoCore
 from .conversions import (
+    _int_to_bitvector,
+    basis_element_to_int,
     basis_mask_to_field_element,
     build_basis_change_matrix,
     field_element_to_basis_mask,
     field_element_to_int,
     invert_matrix,
-    matrix_to_rows,
-    rows_to_matrix,
-    write_block,
 )
 from .parsing import BasisLike, FieldElementLike, PolynomialLike, parse_field_element, parse_poly
 
 
-def _conjugate_rows(
-    rows: Sequence[int],
-    change: BitMatrix,
-    change_inv: BitMatrix,
-    degree: int,
-) -> list[int]:
-    return matrix_to_rows(change_inv @ rows_to_matrix(rows, degree, degree) @ change)
+def _nonnegative_int_to_bitvector(value: int) -> _NativeBitVector:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("value must be an int")
+    if value < 0:
+        raise ValueError("value must be non-negative")
+    return _int_to_bitvector(value, max(1, value.bit_length()))
 
 
 class Mastrovito:
@@ -60,25 +42,17 @@ class Mastrovito:
     poly : str | tuple[int, Sequence[int]] | Sequence[int]
         Irreducible polynomial representation.
     basis : Sequence[int | str | Sequence[int]] | None, default=None
-        Ordered coordinate basis for the returned matrices. Integers denote
-        monomials `x^i`. Strings and sequences denote general field elements
-        in polynomial form.
+        Ordered coordinate basis for the returned matrices.
     element : int | str | Sequence[int] | None, default=None
         Non-zero field element in the standard polynomial basis.
     element_mask : int | None, default=None
-        Bitmask of coordinates in the active basis. When `basis` is None,
-        this is interpreted in the standard polynomial basis.
+        Bitmask of coordinates in the active basis.
 
     Notes
     -----
     Exactly one of element and element_mask may be passed. If neither is
     provided, the default generator element is x.
-
-    The instance normalizes the generator into two coordinate systems:
-        - element_standard_mask: coordinates in the standard polynomial basis
-        - element_mask: coordinates in the active basis
     """
-        
     __slots__ = (
         "degree",
         "powers",
@@ -87,8 +61,7 @@ class Mastrovito:
         "element_mask",
         "element_standard_mask",
         "_period",
-        "_power_basis_rows",
-        "_m_alpha",
+        "_impl",
     )
 
     def __init__(
@@ -110,11 +83,15 @@ class Mastrovito:
         if element is None and element_mask is None:
             element = "x"
 
-        change = None
         change_inv = None
+        basis_bits: list[_NativeBitVector] = []
         if basis is not None:
             change = build_basis_change_matrix(basis, degree, powers)
             change_inv = invert_matrix(change)
+            basis_bits = [
+                _int_to_bitvector(basis_element_to_int(item, degree, powers), degree)
+                for item in basis
+            ]
 
         if element_mask is not None:
             element_bits = basis_mask_to_field_element(
@@ -145,23 +122,11 @@ class Mastrovito:
         self.element_mask = resolved_element_mask
         self.element_standard_mask = element_bits
         self._period = (1 << degree) - 1
-
-        standard_power_rows = build_standard_power_matrices(degree, powers)
-
-        if change is not None and change_inv is not None:
-            power_basis_rows = [
-                _conjugate_rows(rows, change, change_inv, degree)
-                for rows in standard_power_rows
-            ]
-        else:
-            power_basis_rows = [list(rows) for rows in standard_power_rows]
-
-        self._power_basis_rows = tuple(tuple(rows) for rows in power_basis_rows)
-
-        self._m_alpha = combine_power_matrices(
-            self._power_basis_rows,
-            element_bits,
+        self._impl = _NativeMastrovitoCore(
             degree,
+            list(powers),
+            _int_to_bitvector(element_bits, degree),
+            basis_bits,
         )
 
     def __repr__(self) -> str:
@@ -172,22 +137,19 @@ class Mastrovito:
             f"element_standard_mask={self.element_standard_mask!r})"
         )
 
-    def get_basis_multiplication_matrices(self) -> list[BitMatrix]:
+    def get_basis_multiplication_matrices(self):
         """Return [rho_B(1), rho_B(x), ..., rho_B(x^(n-1))]."""
-        return [
-            rows_to_matrix(rows, self.degree, self.degree)
-            for rows in self._power_basis_rows
-        ]
+        return self._impl.get_basis_multiplication_matrices()
 
-    def get_mastrovito_matrix(self, power: int) -> BitMatrix:
+    def get_mastrovito_matrix(self, power: int):
         """Return rho_B(element^power) as a degree x degree matrix."""
         if not isinstance(power, int):
             raise TypeError("power must be an int")
+        return self._impl.get_mastrovito_matrix(
+            _nonnegative_int_to_bitvector(power % self._period)
+        )
 
-        rows = matrix_power_rows(self._m_alpha, power % self._period, self.degree)
-        return rows_to_matrix(rows, self.degree, self.degree)
-
-    def build_check_matrix(self, c: int, k: int, *, start_i: int = 0) -> BitMatrix:
+    def build_check_matrix(self, c: int, k: int, *, start_i: int = 0):
         """Build a parity-check matrix with blocks rho_B(element^(step * j)).
 
         Parameters
@@ -199,6 +161,7 @@ class Mastrovito:
         start_i : int, default=0
             Starting step index for the block-row sequence.
         """
+        ...
         if not isinstance(c, int):
             raise TypeError("c must be an int")
         if not isinstance(k, int):
@@ -210,33 +173,12 @@ class Mastrovito:
         if c < k:
             raise ValueError("c must be greater than or equal to k")
 
-        row_block_count = c - k
-        rows = row_block_count * self.degree
-        cols = c * self.degree
-        matrix = BitMatrix(rows, cols)
-
-        if rows == 0 or cols == 0:
-            return matrix
-
-        required_powers = {
-            ((start_i + row_block) * col_block) % self._period
-            for row_block in range(row_block_count)
-            for col_block in range(c)
-        }
-        blocks = precompute_blocks(self._m_alpha, self.degree, required_powers)
-
-        for row_block in range(row_block_count):
-            row_offset = row_block * self.degree
-            step = start_i + row_block
-
-            for col_block in range(c):
-                col_offset = col_block * self.degree
-                power = (step * col_block) % self._period
-                write_block(matrix, row_offset, col_offset, blocks[power])
-
-        return matrix
-
-
+        return self._impl.build_check_matrix(
+            c,
+            k,
+            _nonnegative_int_to_bitvector(start_i),
+        )
+    
 def build_check_matrix(
     poly: PolynomialLike,
     c: int,
@@ -246,7 +188,8 @@ def build_check_matrix(
     basis: BasisLike | None = None,
     element: FieldElementLike | None = None,
     element_mask: int | None = None,
-) -> BitMatrix:
+):
+    """Build a Mastrovito-based parity-check matrix for the given field setup."""
     generator = Mastrovito(
         poly,
         basis=basis,
@@ -263,7 +206,8 @@ def get_mastrovito_matrix(
     basis: BasisLike | None = None,
     element: FieldElementLike | None = None,
     element_mask: int | None = None,
-) -> BitMatrix:
+):
+    """Return the Mastrovito multiplication matrix for the requested power."""
     generator = Mastrovito(
         poly,
         basis=basis,

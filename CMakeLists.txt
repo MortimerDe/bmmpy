@@ -172,6 +172,7 @@ nanobind_add_module(
     STABLE_ABI
     python/bindings/main.cpp
     python/bindings/bit_matrix.cpp
+    python/bindings/algebra.cpp
     python/bindings/candidate.cpp
     python/bindings/search.cpp
     python/bindings/apply.cpp

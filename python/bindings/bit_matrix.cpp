@@ -150,7 +150,10 @@ void bind_bit_matrix(nb::module_& m) {
         .def("add", &::bmmpy::BitMatrix::add, nb::arg("other"), nb::rv_policy::move)
         .def("mul", &::bmmpy::BitMatrix::mul, nb::arg("other"), nb::rv_policy::move)
         .def("__matmul__", &::bmmpy::BitMatrix::mul, nb::arg("other"), nb::rv_policy::move)
-        .def("power", &::bmmpy::BitMatrix::power, nb::arg("exp"), nb::rv_policy::move)
+        .def("power",
+             nb::overload_cast<std::uint32_t>(&::bmmpy::BitMatrix::power, nb::const_),
+             nb::arg("exp"),
+             nb::rv_policy::move)
         .def("row_popcount", &::bmmpy::BitMatrix::row_popcount, nb::arg("row"))
         .def("weight", &::bmmpy::BitMatrix::weight)
         .def("swap_rows", &::bmmpy::BitMatrix::swap_rows, nb::arg("r1"), nb::arg("r2"))
