@@ -12,9 +12,9 @@ namespace bmmpy {
 namespace {
 
 constexpr std::size_t kMaxCudaCandidates = 128;
-constexpr std::size_t kSupportedWordsPerRow512 = 8;
-constexpr std::size_t kSupportedWordsPerRow1024 = 16;
-constexpr std::size_t kSupportedWordsPerRow4096 = 64;
+constexpr std::size_t k_supp_words_per_row_512 = 8;
+constexpr std::size_t k_supp_words_per_row_1024 = 16;
+constexpr std::size_t k_supp_words_per_row_4096 = 64;
 
 std::size_t resolve_chunk_bits(const std::size_t t, const std::size_t configured_chunk_bits) {
     if (configured_chunk_bits == 0)
@@ -29,8 +29,8 @@ std::size_t resolve_chunk_bits(const std::size_t t, const std::size_t configured
 }
 
 bool is_supported_words_per_row(const std::size_t words_per_row) noexcept {
-    return words_per_row == kSupportedWordsPerRow512 ||
-           words_per_row == kSupportedWordsPerRow1024 || words_per_row == kSupportedWordsPerRow4096;
+    return words_per_row == k_supp_words_per_row_512 ||
+           words_per_row == k_supp_words_per_row_1024 || words_per_row == k_supp_words_per_row_4096;
 }
 
 } // namespace
@@ -48,7 +48,7 @@ std::vector<Candidate> CudaBruteforceSearch::search(const RowWindow& window) {
             "CudaBruteforceSearch: too many rows in the window (must be <= 64)");
     }
 
-    if (t < kMinRows || t > kMaxRows) {
+    if (t < k_min_rows || t > k_max_rows) {
         throw std::invalid_argument(
             "CudaBruteforceSearch: window_rows size is outside the supported GPU range");
     }

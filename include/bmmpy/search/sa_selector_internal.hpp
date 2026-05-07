@@ -13,12 +13,12 @@
 
 namespace bmmpy::sa_detail {
 
-constexpr std::uint64_t kDefaultSeed = 0x9E3779B97F4A7C15ull;
-constexpr std::size_t kWordBits = std::numeric_limits<std::uint64_t>::digits;
+constexpr std::uint64_t k_default_seed = 0x9E3779B97F4A7C15ull;
+constexpr std::size_t k_word_bits = std::numeric_limits<std::uint64_t>::digits;
 
 class XorShift64 {
 public:
-    explicit XorShift64(std::uint64_t seed) noexcept : _state(seed == 0 ? kDefaultSeed : seed) {}
+    explicit XorShift64(std::uint64_t seed) noexcept : _state(seed == 0 ? k_default_seed : seed) {}
 
     std::uint64_t next_u64() noexcept {
         std::uint64_t x = _state;
@@ -36,8 +36,8 @@ public:
     }
 
     double next_unit_double() noexcept {
-        constexpr double kInv53 = 1.0 / 9007199254740992.0;
-        return static_cast<double>(next_u64() >> 11) * kInv53;
+        constexpr double k_inv_53 = 1.0 / 9007199254740992.0;
+        return static_cast<double>(next_u64() >> 11) * k_inv_53;
     }
 
 private:
@@ -70,7 +70,7 @@ inline std::vector<std::size_t> sorted_copy(const std::vector<std::size_t>& rows
 }
 
 inline std::uint64_t tail_mask_for_cols(std::size_t cols) noexcept {
-    const std::size_t tail_bits = cols % kWordBits;
+    const std::size_t tail_bits = cols % k_word_bits;
     if (tail_bits == 0)
         return ~std::uint64_t{0};
     return (std::uint64_t{1} << tail_bits) - 1;

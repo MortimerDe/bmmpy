@@ -1,5 +1,7 @@
 #pragma once
 
+#include "bmmpy/core/bit_vector.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
@@ -62,10 +64,20 @@ public:
 
     void row_xor(std::size_t target_row, std::size_t source_row) noexcept;
     void row_xor_from(std::size_t target_row, const BitMatrix& source, std::size_t source_row);
+    void xor_assign(const BitMatrix& other);
+
+    BitVector row_bits(std::size_t row) const;
+    void set_row_bits(std::size_t row, const BitVector& bits);
+
+    void row_or_words(std::size_t target_row,
+                      std::size_t col_offset,
+                      const std::uint64_t* src_words,
+                      std::size_t src_bit_count);
 
     BitMatrix add(const BitMatrix& other) const;
     BitMatrix mul(const BitMatrix& other) const;
     BitMatrix power(std::uint32_t exp) const;
+    BitMatrix power(const BitVector& exp) const;
 
     std::uint64_t row_popcount(std::size_t row) const;
     std::uint64_t weight() const;

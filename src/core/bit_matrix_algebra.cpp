@@ -10,13 +10,17 @@ BitMatrix BitMatrix::identity(std::size_t n) {
     return result;
 }
 
-BitMatrix BitMatrix::add(const BitMatrix& other) const {
+void BitMatrix::xor_assign(const BitMatrix& other) {
     if (_rows != other._rows || _cols != other._cols)
         throw MatrixError(MatrixErr::DimensionMismatch);
 
-    BitMatrix result(*this);
     for (std::size_t r = 0; r < _rows; ++r)
-        result.row_xor_from(r, other, r);
+        row_xor_from(r, other, r);
+}
+
+BitMatrix BitMatrix::add(const BitMatrix& other) const {
+    BitMatrix result(*this);
+    result.xor_assign(other);
     return result;
 }
 
@@ -37,7 +41,7 @@ BitMatrix BitMatrix::mul(const BitMatrix& other) const {
                 const std::size_t k = word_idx * k_word_bits + bit;
                 if (k < _cols)
                     result.row_xor_from(i, other, k);
-                bits &= (bits - 1);
+                bits &= (bits - 1u);
             }
         }
     }
@@ -46,17 +50,23 @@ BitMatrix BitMatrix::mul(const BitMatrix& other) const {
 }
 
 BitMatrix BitMatrix::power(std::uint32_t exp) const {
+    return power(BitVector::from_u64(static_cast<std::uint64_t>(exp), 32u));
+}
+
+BitMatrix BitMatrix::power(const BitVector& exp) const {
     if (_rows != _cols)
         throw MatrixError(MatrixErr::DimensionMismatch);
 
     BitMatrix result = identity(_rows);
     BitMatrix base(*this);
+    BitVector exponent = exp;
 
-    while (exp != 0) {
-        if ((exp & 1u) != 0)
+    while (exponent.any()) {
+        if (exponent.is_odd())
             result = result.mul(base);
-        exp >>= 1u;
-        if (exp != 0)
+
+        exponent.shift_right_one();
+        if (exponent.any())
             base = base.mul(base);
     }
 

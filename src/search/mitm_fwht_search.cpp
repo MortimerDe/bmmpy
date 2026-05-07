@@ -280,11 +280,11 @@ std::vector<Candidate> MitmFwhtSearch::search(const RowWindow& window) {
 
     const auto [low_bits, high_bits] = get_split_info(t);
 
-    if (low_bits > kMaxLowBits) {
+    if (low_bits > k_max_low_bits) {
         throw std::invalid_argument("MitmFwhtSearch: low half exceeds supported width");
     }
 
-    if (low_bits >= kMaxHalfBits || high_bits >= kMaxHalfBits) {
+    if (low_bits >= k_max_half_bits || high_bits >= k_max_half_bits) {
         throw std::invalid_argument("MitmFwhtSearch: split dimensions must be < 31");
     }
 

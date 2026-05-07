@@ -1,6 +1,8 @@
 BUILD_DIR ?= build
 BUILD_TYPE ?= Debug
 PYTHON ?= python3
+PYTHON_SYS_EXECUTABLE := $(shell $(PYTHON) -c "import sys; print(sys.executable)")
+PYTHON_CMAKE_ARG ?= -DPython_EXECUTABLE=$(PYTHON_SYS_EXECUTABLE)
 PIP ?= $(PYTHON) -m pip
 CMAKE ?= cmake
 CTEST ?= ctest
@@ -22,7 +24,7 @@ help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "%-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 configure: ## Configure CMake in $(BUILD_DIR)
-	$(CMAKE) -S . -B $(BUILD_DIR) -G Ninja $(CMAKE_ARGS)
+	$(CMAKE) -S . -B $(BUILD_DIR) -G Ninja $(CMAKE_ARGS) $(PYTHON_CMAKE_ARG)
 
 build: configure ## Build native targets
 	$(CMAKE) --build $(BUILD_DIR)
@@ -78,7 +80,7 @@ test: build ## Run all tests via CTest
 test-cpp: build ## Run only native C++ tests
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure -L cpp
 
-test-py: build ## Run only Python tests registered in CTest
+test-py: build ## Run Python tests via CTest
 	$(CTEST) --test-dir $(BUILD_DIR) --output-on-failure -L python
 
 test-fast: build ## Run everything except CUDA-labelled tests

@@ -11,10 +11,10 @@
 namespace bmmpy {
 namespace {
 
-constexpr std::size_t kWordBits = std::numeric_limits<std::uint64_t>::digits;
+constexpr std::size_t k_word_bits = std::numeric_limits<std::uint64_t>::digits;
 
 std::uint64_t tail_mask_for_cols(std::size_t cols) noexcept {
-    const std::size_t tail_bits = cols % kWordBits;
+    const std::size_t tail_bits = cols % k_word_bits;
     if (tail_bits == 0)
         return ~std::uint64_t{0};
 

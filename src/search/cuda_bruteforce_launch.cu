@@ -20,18 +20,18 @@ using cuda_launch_detail::ensure_buffer;
 using cuda_launch_detail::ensure_result_buffers;
 using cuda_launch_detail::kMaxCandidates;
 
-constexpr int kThreadsPerBlock = 256;
-constexpr int kWarpSize = 32;
-constexpr int kWarpCount = kThreadsPerBlock / kWarpSize;
-constexpr std::size_t kAutoChunkBits = 12;
-constexpr std::size_t kSupportedWordsPerRow512 = 8;
-constexpr std::size_t kSupportedWordsPerRow1024 = 16;
-constexpr std::size_t kSupportedWordsPerRow4096 = 64;
-constexpr std::size_t kMaxRows = 64;
-constexpr std::size_t kMaskBits = 64;
+constexpr int k_threads_per_block = 256;
+constexpr int k_warp_size = 32;
+constexpr int k_warp_count = k_threads_per_block / k_warp_size;
+constexpr std::size_t k_auto_chunk_bits = 12;
+constexpr std::size_t k_supp_words_per_row_512 = 8;
+constexpr std::size_t k_supp_words_per_row_1024 = 16;
+constexpr std::size_t k_supp_words_per_row_4096 = 64;
+constexpr std::size_t k_max_rows = 64;
+constexpr std::size_t k_mask_bits = 64;
 
-static_assert(kThreadsPerBlock % kWarpSize == 0,
-              "kThreadsPerBlock must be a multiple of warp size");
+static_assert(k_threads_per_block % k_warp_size == 0,
+              "k_threads_per_block must be a multiple of warp size");
 
 struct BruteforceDeviceWorkspace {
     int device = -1;
@@ -56,8 +56,8 @@ struct BruteforceDeviceWorkspace {
 };
 
 bool is_supported_words_per_row(const std::size_t words_per_row) noexcept {
-    return words_per_row == kSupportedWordsPerRow512 ||
-           words_per_row == kSupportedWordsPerRow1024 || words_per_row == kSupportedWordsPerRow4096;
+    return words_per_row == k_supp_words_per_row_512 ||
+           words_per_row == k_supp_words_per_row_1024 || words_per_row == k_supp_words_per_row_4096;
 }
 
 std::size_t resolve_chunk_bits(const std::size_t rows, const std::size_t configured_chunk_bits) {
@@ -68,10 +68,10 @@ std::size_t resolve_chunk_bits(const std::size_t rows, const std::size_t configu
         if (rows == 1)
             return 1;
 
-        return std::min<std::size_t>(rows - 1, kAutoChunkBits);
+        return std::min<std::size_t>(rows - 1, k_auto_chunk_bits);
     }
 
-    if (configured_chunk_bits >= rows || configured_chunk_bits >= kMaskBits) {
+    if (configured_chunk_bits >= rows || configured_chunk_bits >= k_mask_bits) {
         throw std::invalid_argument(
             "run_cuda_bruteforce_search: chunk_bits must be in [1, rows - 1] or 0 for auto");
     }
@@ -81,7 +81,7 @@ std::size_t resolve_chunk_bits(const std::size_t rows, const std::size_t configu
 
 std::uint64_t prefix_count_for(const std::size_t rows, const std::size_t chunk_bits) {
     const std::size_t high_bits = rows - chunk_bits;
-    if (high_bits >= kMaskBits) {
+    if (high_bits >= k_mask_bits) {
         throw std::invalid_argument(
             "run_cuda_bruteforce_search: high-prefix bit count must be < 64");
     }
@@ -118,7 +118,7 @@ insert_topk_runtime(DeviceTopKEntry* best, int& size, const int k, const DeviceT
 
 __device__ inline std::uint32_t warp_sum_u32(std::uint32_t value) {
 #pragma unroll
-    for (int offset = kWarpSize / 2; offset > 0; offset >>= 1)
+    for (int offset = k_warp_size / 2; offset > 0; offset >>= 1)
         value += __shfl_down_sync(0xffffffffu, value, offset);
 
     return value;
@@ -136,19 +136,19 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
                                              const std::uint32_t k,
                                              DeviceTopKEntry* __restrict__ block_results) {
     constexpr int KStatic = kMaxCandidates;
-    constexpr int kWordsPerLane = (WordCount + kWarpSize - 1) / kWarpSize;
+    constexpr int kWordsPerLane = (WordCount + k_warp_size - 1) / k_warp_size;
     const int kk = k < static_cast<std::uint32_t>(KStatic) ? static_cast<int>(k) : KStatic;
 
-    const int warp_id = static_cast<int>(threadIdx.x) / kWarpSize;
-    const int lane_id = static_cast<int>(threadIdx.x) % kWarpSize;
+    const int warp_id = static_cast<int>(threadIdx.x) / k_warp_size;
+    const int lane_id = static_cast<int>(threadIdx.x) % k_warp_size;
     // const bool lane_active = lane_id < WordCount;
 
     extern __shared__ std::uint64_t shared_rows[];
 
     __shared__ DeviceTopKEntry shared_best[KStatic];
     __shared__ int shared_best_size;
-    __shared__ DeviceTopKEntry warp_best[kWarpCount][KStatic];
-    __shared__ int warp_best_size[kWarpCount];
+    __shared__ DeviceTopKEntry warp_best[k_warp_count][KStatic];
+    __shared__ int warp_best_size[k_warp_count];
 
     const std::size_t staged_word_count =
         static_cast<std::size_t>(rows) * static_cast<std::size_t>(WordCount);
@@ -168,10 +168,10 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
     const std::uint64_t low_states = std::uint64_t{1} << chunk_bits;
 
     const std::uint64_t first_prefix =
-        static_cast<std::uint64_t>(blockIdx.x) * static_cast<std::uint64_t>(kWarpCount) +
+        static_cast<std::uint64_t>(blockIdx.x) * static_cast<std::uint64_t>(k_warp_count) +
         static_cast<std::uint64_t>(warp_id);
     const std::uint64_t prefix_stride =
-        static_cast<std::uint64_t>(gridDim.x) * static_cast<std::uint64_t>(kWarpCount);
+        static_cast<std::uint64_t>(gridDim.x) * static_cast<std::uint64_t>(k_warp_count);
 
     std::uint64_t current_words[kWordsPerLane];
 
@@ -191,7 +191,7 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
             for (int slot = 0; slot < kWordsPerLane; ++slot) {
                 const std::size_t word_index =
                     static_cast<std::size_t>(lane_id) +
-                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(k_warp_size);
 
                 if (word_index >= static_cast<std::size_t>(WordCount))
                     continue;
@@ -207,7 +207,7 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
         for (int slot = 0; slot < kWordsPerLane; ++slot) {
             const std::size_t word_index =
                 static_cast<std::size_t>(lane_id) +
-                static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+                static_cast<std::size_t>(slot) * static_cast<std::size_t>(k_warp_size);
 
             if (word_index >= static_cast<std::size_t>(WordCount))
                 continue;
@@ -234,7 +234,7 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
             for (int slot = 0; slot < kWordsPerLane; ++slot) {
                 const std::size_t word_index =
                     static_cast<std::size_t>(lane_id) +
-                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(k_warp_size);
 
                 if (word_index >= static_cast<std::size_t>(WordCount))
                     continue;
@@ -248,7 +248,7 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
             for (int slot = 0; slot < kWordsPerLane; ++slot) {
                 const std::size_t word_index =
                     static_cast<std::size_t>(lane_id) +
-                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(kWarpSize);
+                    static_cast<std::size_t>(slot) * static_cast<std::size_t>(k_warp_size);
 
                 if (word_index >= static_cast<std::size_t>(WordCount))
                     continue;
@@ -272,7 +272,7 @@ __global__ void bruteforce_persistent_kernel(const std::uint64_t* __restrict__ r
     if (threadIdx.x == 0) {
         int merged_size = 0;
 
-        for (int warp = 0; warp < kWarpCount; ++warp) {
+        for (int warp = 0; warp < k_warp_count; ++warp) {
             for (int i = 0; i < warp_best_size[warp]; ++i)
                 insert_topk_runtime(shared_best, merged_size, kk, warp_best[warp][i]);
         }
@@ -308,13 +308,13 @@ std::size_t recommend_persistent_blocks(const std::uint64_t prefix_count,
     check_cuda(
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&active_blocks_per_sm,
                                                       bruteforce_persistent_kernel<WordCount>,
-                                                      kThreadsPerBlock,
+                                                      k_threads_per_block,
                                                       static_cast<int>(shared_bytes)),
         "cudaOccupancyMaxActiveBlocksPerMultiprocessor");
 
     const std::uint64_t required_blocks =
-        (prefix_count + static_cast<std::uint64_t>(kWarpCount) - 1) /
-        static_cast<std::uint64_t>(kWarpCount);
+        (prefix_count + static_cast<std::uint64_t>(k_warp_count) - 1) /
+        static_cast<std::uint64_t>(k_warp_count);
 
     const std::uint64_t desired_blocks =
         static_cast<std::uint64_t>(std::max(prop.multiProcessorCount, 1)) *
@@ -339,7 +339,7 @@ void launch_bruteforce_kernel(BruteforceDeviceWorkspace& workspace,
     ensure_result_buffers(workspace.results, persistent_blocks * k, k);
 
     bruteforce_persistent_kernel<WordCount>
-        <<<static_cast<unsigned int>(persistent_blocks), kThreadsPerBlock, shared_bytes>>>(
+        <<<static_cast<unsigned int>(persistent_blocks), k_threads_per_block, shared_bytes>>>(
             workspace.d_row_words,
             static_cast<std::uint32_t>(rows),
             static_cast<std::uint32_t>(chunk_bits),
@@ -359,13 +359,13 @@ void dispatch_bruteforce_kernel(const CudaBruteforcePlan& plan,
                                 const std::uint64_t prefix_count,
                                 const std::size_t k) {
     switch (plan.words_per_row) {
-    case kSupportedWordsPerRow512:
+    case k_supp_words_per_row_512:
         launch_bruteforce_kernel<8>(workspace, plan.rows, chunk_bits, prefix_count, k);
         break;
-    case kSupportedWordsPerRow1024:
+    case k_supp_words_per_row_1024:
         launch_bruteforce_kernel<16>(workspace, plan.rows, chunk_bits, prefix_count, k);
         break;
-    case kSupportedWordsPerRow4096:
+    case k_supp_words_per_row_4096:
         launch_bruteforce_kernel<64>(workspace, plan.rows, chunk_bits, prefix_count, k);
         break;
     default:
@@ -412,7 +412,7 @@ std::vector<CudaBruteforceResult> run_cuda_bruteforce_search(const CudaBruteforc
         throw std::invalid_argument("run_cuda_bruteforce_search: max_candidates must be <= 128");
     }
 
-    if (plan.rows > kMaxRows) {
+    if (plan.rows > k_max_rows) {
         throw std::invalid_argument("run_cuda_bruteforce_search: row count must be <= 64");
     }
 
