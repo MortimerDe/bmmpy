@@ -1,28 +1,15 @@
 #pragma once
 
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
+#include "bmmpy/core/detail/xor_basis.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
-namespace bmmpy::algebra {
-namespace detail {
-
-inline unsigned msb_index64(std::uint64_t value) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
-    return static_cast<unsigned>(63u - static_cast<unsigned>(__builtin_clzll(value)));
-#else
-    unsigned index = 0;
-    while ((value >>= 1u) != 0)
-        ++index;
-    return index;
-#endif
-}
-
-} // namespace detail
+namespace bmmpy {
 
 class BitVector {
 public:
@@ -129,6 +116,15 @@ public:
             _words[word_index] &= ~mask;
     }
 
+    void flip(std::size_t bit_index) {
+        if (bit_index >= _bit_count)
+            throw std::out_of_range("BitVector::flip: bit index out of range");
+
+        const std::size_t word_index = bit_index / 64u;
+        const std::size_t offset = bit_index % 64u;
+        _words[word_index] ^= (1ull << offset);
+    }
+
     void xor_assign(const BitVector& other) {
         if (_bit_count != other._bit_count)
             throw std::invalid_argument("BitVector::xor_assign: bit_count mismatch");
@@ -205,4 +201,4 @@ private:
     std::vector<std::uint64_t> _words;
 };
 
-} // namespace bmmpy::algebra
+} // namespace bmmpy
