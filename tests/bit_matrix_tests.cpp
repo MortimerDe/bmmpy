@@ -451,7 +451,6 @@ int main() {
         {"text_io_exceptions", &test_text_io_exceptions},
         {"binary_io_exceptions", &test_binary_io_exceptions},
         {"row_window_view", &test_row_window_view},
-        {"row_window_view", &test_row_window_view},
         {"row_window_total_weight", &test_row_window_total_weight},
         {"hash_is_canonical_and_data_sensitive", &test_hash_is_canonical_and_data_sensitive},
     };
