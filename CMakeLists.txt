@@ -67,6 +67,9 @@ target_sources(
         src/search/sa_selector_higher_order.cpp
 
         src/solver/exact_basis_solver.cpp
+
+        src/algebra/transforms.cpp
+        src/algebra/mastrovito.cpp
 )
 
 target_include_directories(
@@ -237,6 +240,12 @@ if(BUILD_TESTING)
         tests/cpp/search_cuda_tests.cpp
     )
     set_tests_properties(search_cuda_tests PROPERTIES LABELS "cpp;search;cuda" RESOURCE_LOCK "gpu")
+
+    bmmpy_add_cpp_test(
+        algebra_core_tests
+        tests/cpp/algebra_core_tests.cpp
+    )
+    set_tests_properties(algebra_core_tests PROPERTIES LABELS "cpp;algebra")
 
     execute_process(
         COMMAND ${Python_EXECUTABLE} -c "import pytest"
