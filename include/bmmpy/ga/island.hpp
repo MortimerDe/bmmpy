@@ -4,6 +4,7 @@
 #include "bmmpy/ga/types.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace bmmpy::ga {
 class Island {
