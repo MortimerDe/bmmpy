@@ -1,0 +1,45 @@
+#pragma once
+
+#include "bmmpy/types/candidate.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
+
+namespace bmmpy::ga {
+
+using Individual = std::vector<::bmmpy::Candidate>;
+using Population = std::vector<Individual>;
+
+struct StopCriteria {
+    std::optional<std::size_t> max_generations;
+    std::optional<std::size_t> max_stale_generations;
+    std::optional<std::uint64_t> target_total_weight;
+    // todo: add time limit?
+};
+
+struct RunStats {
+    std::size_t generations = 0;
+    std::size_t evaluations = 0;
+    std::size_t stale_generations = 0;
+    std::uint64_t seed = 0;
+};
+
+struct MigrationPolicy {
+    std::size_t interval_generations = 32;
+    std::size_t export_count = 2;
+    std::size_t import_count = 2;
+    std::size_t shared_pool_capacity = 128;
+};
+
+struct IslandModelSnapshot {
+    bool running = false;
+    bool stop_requested = false;
+    std::size_t island_count = 0;
+    std::size_t active_islands = 0;
+    std::uint64_t total_generations = 0;
+    Individual best_individual;
+};
+
+} // namespace bmmpy::ga
