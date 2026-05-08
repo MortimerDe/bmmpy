@@ -70,6 +70,7 @@ target_sources(
 
         src/algebra/transforms.cpp
         src/algebra/mastrovito.cpp
+        src/algebra/transform_utils.cpp
 )
 
 target_include_directories(
