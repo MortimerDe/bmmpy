@@ -12,8 +12,10 @@
 
 namespace bmmpy::ga {
 namespace {
+
 constexpr auto k_idle_backoff = std::chrono::milliseconds(1);
-};
+
+} // namespace
 
 class Island::Impl {
 public:
@@ -48,6 +50,7 @@ public:
         std::iota(owned_rows.begin(), owned_rows.end(), std::size_t{0});
 
         RowWindow owned_window(materialized_window, owned_rows);
+        algorithm->initialize(owned_window);
 
         initialized = true;
         stop_requested.store(false, std::memory_order_release);
@@ -115,7 +118,77 @@ public:
 
 private:
     void loop() noexcept {
-        // todo
+        try {
+            while (!stop_requested.load(std::memory_order_acquire)) {
+                std::vector<Individual> exported;
+                std::size_t generation_after_step = 0;
+                bool done = false;
+
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex);
+
+                    if (algorithm->done()) {
+                        done = true;
+                    } else {
+                        algorithm->step();
+                        generation_after_step = algorithm->generation();
+
+                        const std::size_t interval = spec.migration.interval_generations;
+                        if (interval != 0 && generation_after_step % interval == 0) {
+                            exported = algorithm->export_migrants(spec.migration.export_count);
+                        }
+
+                        done = algorithm->done();
+                    }
+                }
+
+                if (!exported.empty() && !migration_channel.closed()) {
+                    migration::Batch batch;
+                    batch.source_island = spec.island_id;
+                    batch.migrants.reserve(exported.size());
+
+                    for (Individual& individual : exported) {
+                        batch.migrants.push_back(migration::Migrant{
+                            spec.island_id,
+                            std::move(individual),
+                            static_cast<std::uint64_t>(generation_after_step),
+                        });
+                    }
+
+                    migration_channel.publish(std::move(batch));
+                }
+
+                if (spec.migration.import_count != 0 && !migration_channel.closed()) {
+                    std::vector<migration::Migrant> imported =
+                        migration_channel.try_take(spec.island_id, spec.migration.import_count);
+
+                    if (!imported.empty()) {
+                        std::vector<Individual> migrants;
+                        migrants.reserve(imported.size());
+
+                        for (migration::Migrant& migrant : imported) {
+                            migrants.push_back(std::move(migrant.individual));
+                        }
+
+                        std::lock_guard<std::mutex> lock(state_mutex);
+                        algorithm->import_migrants(std::move(migrants));
+                    }
+                }
+
+                if (done) {
+                    break;
+                }
+
+                if (spec.migration.interval_generations == 0) {
+                    std::this_thread::sleep_for(k_idle_backoff);
+                }
+            }
+        } catch (...) {
+            // swallow exceptions for now.
+        }
+
+        running.store(false, std::memory_order_release);
+        finished.store(true, std::memory_order_release);
     }
 
     IslandSpec spec;
