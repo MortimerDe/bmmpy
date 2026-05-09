@@ -38,7 +38,7 @@ public:
     Individual best_individual() const;
     IslandModelSnapshot snapshot() const;
 
-    Individual run(const ::bmmpy::RowWindow& window);
+    Individual optimize(const ::bmmpy::RowWindow& window);
 
     const char* name() const noexcept { return "island_model"; }
 

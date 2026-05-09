@@ -24,7 +24,7 @@ public:
 
     void initialize(const ::bmmpy::RowWindow& window);
 
-    void run();
+    void start();
     void request_stop() noexcept;
     void wait();
 
@@ -38,7 +38,7 @@ public:
     RunStats stats() const;
     IslandSnapshot snapshot() const;
 
-    const char* algorithm_name() const noexcept;
+    const char* name() const noexcept; // algorithm name
 
 private:
     class Impl;
