@@ -27,7 +27,7 @@ public:
     explicit GeneticAlgorithm(GeneticAlgorithmConfig config = {});
 
     void initialize(const ::bmmpy::RowWindow& window) override;
-    void step_generation() override;
+    void step() override;
 
     bool done() const noexcept override;
     std::size_t generation() const noexcept override;

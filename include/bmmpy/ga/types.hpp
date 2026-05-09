@@ -34,6 +34,11 @@ struct MigrationPolicy {
     std::size_t shared_pool_capacity = 128;
 };
 
+struct IslandSpec {
+    std::size_t island_id = 0;
+    MigrationPolicy migration;
+};
+
 struct IslandSnapshot {
     std::size_t island_id = 0;
     bool running = false;

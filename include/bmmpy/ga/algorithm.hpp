@@ -29,6 +29,6 @@ public:
     virtual const char* name() const noexcept = 0;
 };
 
-using AlgorithmFactory = std::function<std::unique_ptr<Algorithm>(std::size_t island_id)>;
+using AlgorithmFactory = std::function<std::unique_ptr<Algorithm>(const IslandSpec& spec)>;
 
 } // namespace bmmpy::ga

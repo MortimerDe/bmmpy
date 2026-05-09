@@ -6,14 +6,15 @@
 #include "bmmpy/ga/types.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace bmmpy::ga {
 struct IslandModelConfig {
-    std::size_t island_count = 8; // todo: or 0 for auto-detect?
-    MigrationPolicy migration;
+    std::vector<IslandSpec> islands;
 };
 
 class IslandModel final {
+public:
     IslandModel(IslandModelConfig config,
                 AlgorithmFactory algorithm_factory,
                 std::unique_ptr<MigrationChannel> migration_channel);
