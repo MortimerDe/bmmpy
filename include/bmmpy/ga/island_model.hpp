@@ -2,7 +2,7 @@
 
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/ga/algorithm.hpp"
-#include "bmmpy/ga/migration_channel.hpp"
+#include "bmmpy/ga/migration/channel.hpp"
 #include "bmmpy/ga/types.hpp"
 
 #include <memory>
@@ -17,7 +17,7 @@ class IslandModel final {
 public:
     IslandModel(IslandModelConfig config,
                 AlgorithmFactory algorithm_factory,
-                std::unique_ptr<MigrationChannel> migration_channel);
+                std::unique_ptr<migration::Channel> migration_channel);
     ~IslandModel();
 
     IslandModel(IslandModel&&) noexcept;

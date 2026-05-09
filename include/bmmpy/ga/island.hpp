@@ -1,9 +1,8 @@
-// /home/morta/repos/bmmpy/include/bmmpy/ga/island.hpp
 #pragma once
 
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/ga/algorithm.hpp"
-#include "bmmpy/ga/migration_channel.hpp"
+#include "bmmpy/ga/migration/channel.hpp"
 #include "bmmpy/ga/types.hpp"
 
 #include <memory>
@@ -14,7 +13,7 @@ class Island final {
 public:
     Island(IslandSpec spec,
            std::unique_ptr<Algorithm> algorithm,
-           MigrationChannel& migration_channel);
+           migration::Channel& migration_channel);
     ~Island();
 
     Island(Island&&) noexcept;
