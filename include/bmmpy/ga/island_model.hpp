@@ -2,7 +2,6 @@
 
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/ga/algorithm.hpp"
-#include "bmmpy/ga/island.hpp"
 #include "bmmpy/ga/migration_channel.hpp"
 #include "bmmpy/ga/types.hpp"
 

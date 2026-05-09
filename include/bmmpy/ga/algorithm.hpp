@@ -15,7 +15,7 @@ public:
     virtual ~Algorithm() = default;
 
     virtual void initialize(const ::bmmpy::RowWindow& window) = 0;
-    virtual void step_generation() = 0;
+    virtual void step() = 0;
 
     virtual bool done() const noexcept = 0;
     virtual std::size_t generation() const noexcept = 0;
