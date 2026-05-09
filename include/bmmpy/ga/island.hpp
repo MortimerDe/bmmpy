@@ -1,23 +1,30 @@
 #pragma once
 
 #include "bmmpy/core/row_window.hpp"
+#include "bmmpy/ga/algorithm.hpp"
+#include "bmmpy/ga/island.hpp"
+#include "bmmpy/ga/migration_channel.hpp"
 #include "bmmpy/ga/types.hpp"
-#include "bmmpy/ga/worker.hpp"
 
 #include <memory>
-#include <vector>
 
 namespace bmmpy::ga {
-
 struct IslandModelConfig {
-    std::size_t island_count = 8;
+    std::size_t island_count = 8; // todo: or 0 for auto-detect?
     MigrationPolicy migration;
 };
 
 class IslandModel final {
-public:
-    IslandModel(IslandModelConfig config, std::unique_ptr<Worker> prototype);
-    IslandModel(IslandModelConfig config, std::vector<std::unique_ptr<Worker>> workers);
+    IslandModel(IslandModelConfig config,
+                AlgorithmFactory algorithm_factory,
+                std::unique_ptr<MigrationChannel> migration_channel);
+    ~IslandModel();
+
+    IslandModel(IslandModel&&) noexcept;
+    IslandModel& operator=(IslandModel&&) noexcept;
+
+    IslandModel(const IslandModel&) = delete;
+    IslandModel& operator=(const IslandModel&) = delete;
 
     void initialize(const ::bmmpy::RowWindow& window);
 
@@ -36,7 +43,7 @@ public:
     const char* name() const noexcept { return "island_model"; }
 
 private:
-    IslandModelConfig _config;
+    class Impl;
+    std::unique_ptr<Impl> _impl;
 };
-
 } // namespace bmmpy::ga

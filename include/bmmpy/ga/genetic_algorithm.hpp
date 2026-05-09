@@ -1,8 +1,8 @@
 #pragma once
 
 #include "bmmpy/core/row_window.hpp"
+#include "bmmpy/ga/algorithm.hpp"
 #include "bmmpy/ga/types.hpp"
-#include "bmmpy/ga/worker.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -22,7 +22,7 @@ struct GeneticAlgorithmConfig {
     std::uint64_t seed = 0;
 };
 
-class GeneticAlgorithm final : public Worker {
+class GeneticAlgorithm final : public Algorithm {
 public:
     explicit GeneticAlgorithm(GeneticAlgorithmConfig config = {});
 
@@ -37,8 +37,6 @@ public:
 
     std::vector<Individual> export_migrants(std::size_t max_count) override;
     void import_migrants(std::vector<Individual> migrants) override;
-
-    std::unique_ptr<Worker> clone() const override;
 
     Individual optimize(const ::bmmpy::RowWindow& window);
 
