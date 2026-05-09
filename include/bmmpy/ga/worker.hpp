@@ -7,10 +7,10 @@
 #include <vector>
 
 namespace bmmpy::ga {
-class Island {
+class Worker {
 public:
-    virtual ~Island() = default;
-    virtual std::unique_ptr<Island> clone() const = 0;
+    virtual ~Worker() = default;
+    virtual std::unique_ptr<Worker> clone() const = 0;
     virtual void initialize(const ::bmmpy::RowWindow& window) = 0;
     virtual void step_generation() = 0;
     virtual bool done() const noexcept = 0;

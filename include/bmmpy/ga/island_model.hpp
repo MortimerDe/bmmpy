@@ -1,9 +1,8 @@
-// include/bmmpy/ga/island_model.hpp
 #pragma once
 
 #include "bmmpy/core/row_window.hpp"
-#include "bmmpy/ga/island.hpp"
 #include "bmmpy/ga/types.hpp"
+#include "bmmpy/ga/worker.hpp"
 
 #include <memory>
 #include <vector>
@@ -17,8 +16,8 @@ struct IslandModelConfig {
 
 class IslandModel final {
 public:
-    IslandModel(IslandModelConfig config, std::unique_ptr<Island> prototype);
-    IslandModel(IslandModelConfig config, std::vector<std::unique_ptr<Island>> workers);
+    IslandModel(IslandModelConfig config, std::unique_ptr<Worker> prototype);
+    IslandModel(IslandModelConfig config, std::vector<std::unique_ptr<Worker>> workers);
 
     void initialize(const ::bmmpy::RowWindow& window);
 
