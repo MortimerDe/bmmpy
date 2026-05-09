@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/ga/algorithm.hpp"
 #include "bmmpy/ga/migration/channel.hpp"

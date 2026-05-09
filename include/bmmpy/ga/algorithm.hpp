@@ -15,7 +15,7 @@ public:
     virtual ~Algorithm() = default;
 
     virtual void initialize(const ::bmmpy::RowWindow& window) = 0;
-    virtual void step() = 0;
+    virtual void step() = 0; // = one generation
 
     virtual bool done() const noexcept = 0;
     virtual std::size_t generation() const noexcept = 0;
@@ -25,6 +25,8 @@ public:
 
     virtual std::vector<Individual> export_migrants(std::size_t max_count) = 0;
     virtual void import_migrants(std::vector<Individual> migrants) = 0;
+
+    virtual std::size_t best_score() const = 0;
 
     virtual const char* name() const noexcept = 0;
 };
