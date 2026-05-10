@@ -6,7 +6,7 @@
 
 #include <iostream>
 #include <memory>
-// #include <print>
+#include <print>
 #include <vector>
 
 namespace {
@@ -34,24 +34,26 @@ bmmpy::BitMatrix make_demo_matrix() {
 }
 
 void print_snapshot(const bmmpy::ga::IslandModelSnapshot& snapshot) {
-    std::cout << "model.running=" << snapshot.running << "\n";
-    std::cout << "model.stop_requested=" << snapshot.stop_requested << "\n";
-    std::cout << "model.island_count=" << snapshot.island_count << "\n";
-    std::cout << "model.total_generations=" << snapshot.total_generations << "\n";
-    std::cout << "model.best_score=" << snapshot.best_score << "\n";
+    std::println("model.running={}", snapshot.running);
+    std::println("model.stop_requested={}", snapshot.stop_requested);
+    std::println("model.island_count={}", snapshot.island_count);
+    std::println("model.total_generations={}", snapshot.total_generations);
+    std::println("model.best_score={}", snapshot.best_score);
 
     for (const auto& island : snapshot.islands) {
-        std::cout << "  island[" << island.island_id << "]"
-                  << " running=" << island.running << " finished=" << island.finished
-                  << " generations=" << island.stats.generations
-                  << " best_score=" << island.best_score << "\n";
+        std::println("  island[{}] running={} finished={} generations={} best_score={}",
+                     island.island_id,
+                     island.running,
+                     island.finished,
+                     island.stats.generations,
+                     island.best_score);
     }
 }
 
 } // namespace
 
 int main() {
-    std::cout << "Version: " << bmmpy::get_version() << "\n";
+    std::println("Version: {}", bmmpy::get_version());
 
     bmmpy::BitMatrix matrix = make_demo_matrix();
     bmmpy::RowWindow window = matrix.row_window(std::vector<std::size_t>{0, 1, 2, 3});
@@ -98,7 +100,7 @@ int main() {
         const auto snapshot = model.snapshot();
 
         print_snapshot(snapshot);
-        std::cout << "best_individual.size=" << best.size() << "\n";
+        std::println("best_individual.size={}", best.size());
     } catch (const std::exception& ex) {
         std::cerr << "ga runtime error: " << ex.what() << "\n";
         return 1;
