@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <exception>
 #include <mutex>
 #include <numeric>
 #include <stdexcept>
@@ -31,7 +32,10 @@ public:
 
     ~Impl() {
         request_stop();
-        wait();
+        try {
+            wait();
+        } catch (...) {
+        }
     }
 
     void initialize(const RowWindow& window) {
@@ -56,6 +60,9 @@ public:
         stop_requested.store(false, std::memory_order_release);
         finished.store(false, std::memory_order_release);
         running.store(false, std::memory_order_release);
+
+        failure = nullptr;
+        failed.store(false, std::memory_order_release);
     }
 
     void start() {
@@ -79,6 +86,16 @@ public:
     void wait() {
         if (worker.joinable()) {
             worker.join();
+        }
+
+        std::exception_ptr failure_copy;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex);
+            failure_copy = failure;
+        }
+
+        if (failure_copy) {
+            std::rethrow_exception(failure_copy);
         }
     }
 
@@ -108,6 +125,7 @@ public:
             stop_requested.load(std::memory_order_acquire),
             finished.load(std::memory_order_acquire),
             algorithm->stats(),
+            algorithm->best_score(),
             algorithm->best_individual(),
         };
     }
@@ -184,7 +202,11 @@ private:
                 }
             }
         } catch (...) {
-            // swallow exceptions for now.
+            {
+                std::lock_guard<std::mutex> lock(state_mutex);
+                failure = std::current_exception();
+            }
+            failed.store(true, std::memory_order_release);
         }
 
         running.store(false, std::memory_order_release);
@@ -205,6 +227,9 @@ private:
     std::atomic<bool> running{false};
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> finished{false};
+
+    std::exception_ptr failure;
+    std::atomic<bool> failed{false};
 };
 
 Island::Island(IslandSpec spec,

@@ -17,6 +17,7 @@ public:
     std::vector<Migrant> try_take(std::size_t consumer_island, std::size_t max_count) override;
 
     void clear() override;
+    void reset() override;
     void close() noexcept override;
     bool closed() const noexcept override;
 

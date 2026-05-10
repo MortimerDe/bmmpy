@@ -120,7 +120,7 @@ std::vector<Migrant> BoundedChannel::try_take(const std::size_t consumer_island,
     }
 
     for (auto it = pool_.begin(); it != pool_.end() && out.size() < max_count;) {
-        if (it->source_island == consumer_island) { // incest alert ⚠️⚠️⚠️
+        if (it->source_island == consumer_island) {
             ++it;
             continue;
         }
@@ -141,6 +141,12 @@ std::vector<Migrant> BoundedChannel::try_take(const std::size_t consumer_island,
 void BoundedChannel::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     pool_.clear();
+}
+
+void BoundedChannel::reset() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pool_.clear();
+    closed_ = false;
 }
 
 void BoundedChannel::close() noexcept {

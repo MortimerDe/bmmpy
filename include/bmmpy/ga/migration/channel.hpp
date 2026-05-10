@@ -50,6 +50,7 @@ public:
     virtual std::vector<Migrant> try_take(std::size_t consumer_island, std::size_t max_count) = 0;
 
     virtual void clear() = 0;
+    virtual void reset() = 0;
     virtual void close() noexcept = 0;
     virtual bool closed() const noexcept = 0;
 

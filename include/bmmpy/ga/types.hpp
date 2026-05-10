@@ -45,6 +45,7 @@ struct IslandSnapshot {
     bool stop_requested = false;
     bool finished = false;
     RunStats stats;
+    std::size_t best_score = 0;
     Individual best_individual;
 };
 
@@ -53,6 +54,7 @@ struct IslandModelSnapshot {
     bool stop_requested = false;
     std::size_t island_count = 0;
     std::uint64_t total_generations = 0;
+    std::size_t best_score = 0;
     Individual best_individual;
     std::vector<IslandSnapshot> islands;
 };

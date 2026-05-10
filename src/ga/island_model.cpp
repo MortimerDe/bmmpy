@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -36,7 +37,8 @@ public:
         islands.clear();
         islands.reserve(config.islands.size());
 
-        migration_channel->clear();
+        // migration_channel->clear();
+        migration_channel->reset();
 
         for (const IslandSpec& spec : config.islands) {
             std::unique_ptr<Algorithm> algorithm = algorithm_factory(spec);
@@ -80,11 +82,23 @@ public:
     }
 
     void wait() {
+        std::exception_ptr first_error;
+
         for (Island& island : islands) {
-            island.wait();
+            try {
+                island.wait();
+            } catch (...) {
+                if (!first_error) {
+                    first_error = std::current_exception();
+                }
+            }
         }
 
         running.store(false, std::memory_order_release);
+
+        if (first_error) {
+            std::rethrow_exception(first_error);
+        }
     }
 
     bool is_running() const noexcept { return running.load(std::memory_order_acquire); }
@@ -99,7 +113,7 @@ public:
 
         for (const Island& island : islands) {
             const IslandSnapshot snap = island.snapshot();
-            const std::size_t score = score_of(snap.best_individual);
+            const std::size_t score = snap.best_score;
 
             if (score < best_score) {
                 best_score = score;
@@ -124,7 +138,7 @@ public:
             IslandSnapshot island_snapshot = island.snapshot();
             model_snapshot.total_generations += island_snapshot.stats.generations;
 
-            const std::size_t score = score_of(island_snapshot.best_individual);
+            const std::size_t score = island_snapshot.best_score;
             if (score < best_score) {
                 best_score = score;
                 model_snapshot.best_individual = island_snapshot.best_individual;
@@ -132,6 +146,8 @@ public:
 
             model_snapshot.islands.push_back(std::move(island_snapshot));
         }
+
+        model_snapshot.best_score = best_score;
 
         return model_snapshot;
     }
@@ -144,14 +160,6 @@ public:
     }
 
 private:
-    static std::size_t score_of(const Individual& individual) {
-        std::size_t total = 0;
-        for (const Candidate& candidate : individual) {
-            total += candidate.weight;
-        }
-        return total;
-    }
-
     IslandModelConfig config;
     AlgorithmFactory algorithm_factory;
     std::unique_ptr<migration::Channel> migration_channel;
