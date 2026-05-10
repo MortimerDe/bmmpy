@@ -71,6 +71,10 @@ target_sources(
         src/algebra/transforms.cpp
         src/algebra/mastrovito.cpp
         src/algebra/transform_utils.cpp
+
+        src/ga/island.cpp
+        src/ga/bounded_channel.cpp
+        src/ga/island_model.cpp
 )
 
 target_include_directories(

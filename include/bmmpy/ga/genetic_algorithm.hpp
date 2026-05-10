@@ -6,10 +6,10 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 namespace bmmpy::ga {
+
 struct GeneticAlgorithmConfig {
     std::size_t population_size = 128;
     std::size_t elite_count = 8;
@@ -38,11 +38,19 @@ public:
     std::vector<Individual> export_migrants(std::size_t max_count) override;
     void import_migrants(std::vector<Individual> migrants) override;
 
+    std::size_t best_score() const override;
+
     Individual optimize(const ::bmmpy::RowWindow& window);
 
     const char* name() const noexcept override { return "ga"; }
 
 private:
-    GeneticAlgorithmConfig config_;
+    GeneticAlgorithmConfig _config;
+    Individual _best_individual;
+    RunStats _stats{};
+    std::size_t _best_score = 0;
+    bool _initialized = false;
+    bool _done = false;
 };
+
 } // namespace bmmpy::ga
