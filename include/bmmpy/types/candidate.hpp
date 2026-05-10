@@ -65,22 +65,18 @@ struct Candidate {
                 return tmp;
             }
 
-            friend bool operator==(const iterator& lhs,
-                                   const iterator& rhs) noexcept {
-                return lhs._words == rhs._words &&
-                       lhs._word_idx == rhs._word_idx &&
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept {
+                return lhs._words == rhs._words && lhs._word_idx == rhs._word_idx &&
                        lhs._current == rhs._current;
             }
 
-            friend bool operator!=(const iterator& lhs,
-                                   const iterator& rhs) noexcept {
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept {
                 return !(lhs == rhs);
             }
 
         private:
             void skip_empty_words() noexcept {
-                while (_words != nullptr && _word_idx < _words->size() &&
-                       _current == 0) {
+                while (_words != nullptr && _word_idx < _words->size() && _current == 0) {
                     ++_word_idx;
                     if (_word_idx >= _words->size())
                         return;
@@ -96,8 +92,7 @@ struct Candidate {
             std::size_t _base = 0;
         };
 
-        explicit SelectedRows(const mask_type& words) noexcept
-            : _words(&words) {}
+        explicit SelectedRows(const mask_type& words) noexcept : _words(&words) {}
 
         iterator begin() const noexcept { return iterator(_words, 0); }
 
@@ -121,6 +116,13 @@ struct Candidate {
         return Candidate(std::move(mask), weight);
     }
 
+    static Candidate
+    make_unit(const std::size_t row_count, const std::size_t row, const std::uint32_t weight) {
+        std::vector<std::uint64_t> mask((row_count + 63u) / 64u, 0);
+        mask[row / 64u] |= (std::uint64_t{1} << (row % 64u));
+        return Candidate(std::move(mask), weight);
+    }
+
     static Candidate from_u64(word_type mask, std::uint32_t weight) {
         return Candidate(mask_type{mask}, weight);
     }
@@ -133,9 +135,7 @@ struct Candidate {
         return Candidate(std::move(mask), weight);
     }
 
-    static Candidate from_words(const word_type* words,
-                                std::size_t count,
-                                std::uint32_t weight) {
+    static Candidate from_words(const word_type* words, std::size_t count, std::uint32_t weight) {
         return Candidate(mask_type(words, words + count), weight);
     }
 
@@ -159,11 +159,8 @@ struct Candidate {
 
     word_type mask_u64() const {
         if (mask.size() > 1 &&
-            !std::all_of(mask.begin() + 1, mask.end(), [](word_type word) {
-                return word == 0;
-            })) {
-            throw std::logic_error(
-                "Candidate::mask_u64: mask does not fit in u64");
+            !std::all_of(mask.begin() + 1, mask.end(), [](word_type word) { return word == 0; })) {
+            throw std::logic_error("Candidate::mask_u64: mask does not fit in u64");
         }
 
         return mask.empty() ? 0 : mask.front();

@@ -1,69 +1,107 @@
-#include "bmmpy/apply/greedy_applier.hpp"
 #include "bmmpy/core/bit_matrix.hpp"
-#include "bmmpy/search/cuda_mitm_fwht_search.hpp"
-#include "bmmpy/search/mitm_fwht_search.hpp"
+#include "bmmpy/ga/genetic_algorithm.hpp"
+#include "bmmpy/ga/island_model.hpp"
+#include "bmmpy/ga/migration/bounded_channel.hpp"
 #include "bmmpy/stub.hpp"
 
-#include <chrono>
 #include <iostream>
-#include <numeric>
-#include <random>
+#include <memory>
+// #include <print>
 #include <vector>
 
-std::vector<std::size_t> get_random_indices(std::size_t N, std::size_t count = 28) {
-    std::vector<std::size_t> all_indices(N);
-    std::iota(all_indices.begin(), all_indices.end(), 0);
+namespace {
 
-    std::random_device rd;
-    std::mt19937 g(rd());
+bmmpy::BitMatrix make_demo_matrix() {
+    bmmpy::BitMatrix matrix(4, 8);
 
-    if (count < N) {
-        for (std::size_t i = 0; i < count; ++i) {
-            std::uniform_int_distribution<std::size_t> dist(i, N - 1);
-            std::swap(all_indices[i], all_indices[dist(g)]);
-        }
-        all_indices.resize(count);
-    } else {
-        std::shuffle(all_indices.begin(), all_indices.end(), g);
-    }
+    matrix.set(0, 0, true);
+    matrix.set(0, 1, true);
+    matrix.set(0, 4, true);
 
-    return all_indices;
+    matrix.set(1, 1, true);
+    matrix.set(1, 2, true);
+    matrix.set(1, 5, true);
+
+    matrix.set(2, 2, true);
+    matrix.set(2, 3, true);
+    matrix.set(2, 6, true);
+
+    matrix.set(3, 0, true);
+    matrix.set(3, 3, true);
+    matrix.set(3, 7, true);
+
+    return matrix;
 }
 
+void print_snapshot(const bmmpy::ga::IslandModelSnapshot& snapshot) {
+    std::cout << "model.running=" << snapshot.running << "\n";
+    std::cout << "model.stop_requested=" << snapshot.stop_requested << "\n";
+    std::cout << "model.island_count=" << snapshot.island_count << "\n";
+    std::cout << "model.total_generations=" << snapshot.total_generations << "\n";
+    std::cout << "model.best_score=" << snapshot.best_score << "\n";
+
+    for (const auto& island : snapshot.islands) {
+        std::cout << "  island[" << island.island_id << "]"
+                  << " running=" << island.running << " finished=" << island.finished
+                  << " generations=" << island.stats.generations
+                  << " best_score=" << island.best_score << "\n";
+    }
+}
+
+} // namespace
+
 int main() {
-    std::cout << "Version: " << bmmpy::get_version() << std::endl;
+    std::cout << "Version: " << bmmpy::get_version() << "\n";
 
-    bmmpy::BitMatrix bm = bmmpy::BitMatrix::load_text("___matrix.txt");
+    bmmpy::BitMatrix matrix = make_demo_matrix();
+    bmmpy::RowWindow window = matrix.row_window(std::vector<std::size_t>{0, 1, 2, 3});
 
-    std::vector<std::size_t> rows = get_random_indices(bm.rows(), 28);
-    auto window = bm.row_window(rows);
-    std::cout << "window rows: " << window.materialize().weight() << std::endl;
-    bmmpy::CudaMitmFwhtSearch searcher({64, 0});
-    // bmmpy::MitmFwhtSearch searcher({});
+    std::vector<bmmpy::ga::GeneticAlgorithmConfig> configs(3);
+    configs[0].seed = 11;
+    configs[0].stop.max_generations = 8;
 
-    bmmpy::GreedyApplier greedy({1, false, 0x12345678});
+    configs[1].seed = 22;
+    configs[1].stop.max_generations = 12;
 
-    int32_t weight_before = bm.weight();
+    configs[2].seed = 33;
+    configs[2].stop.max_generations = 16;
+
+    bmmpy::ga::IslandModelConfig model_config{{
+        {0,
+         {.interval_generations = 2,
+          .export_count = 1,
+          .import_count = 1,
+          .shared_pool_capacity = 16}},
+        {1,
+         {.interval_generations = 3,
+          .export_count = 1,
+          .import_count = 1,
+          .shared_pool_capacity = 16}},
+        {2,
+         {.interval_generations = 4,
+          .export_count = 1,
+          .import_count = 1,
+          .shared_pool_capacity = 16}},
+    }};
+
+    bmmpy::ga::AlgorithmFactory factory =
+        [configs](const bmmpy::ga::IslandSpec& spec) -> std::unique_ptr<bmmpy::ga::Algorithm> {
+        return std::make_unique<bmmpy::ga::GeneticAlgorithm>(configs.at(spec.island_id));
+    };
+
+    auto channel = std::make_unique<bmmpy::ga::migration::BoundedChannel>(16);
+
+    bmmpy::ga::IslandModel model(std::move(model_config), std::move(factory), std::move(channel));
 
     try {
-        std::cout << "weight: " << bm.weight() << std::endl;
+        const auto best = model.run_to_completion(window);
+        const auto snapshot = model.snapshot();
 
-        auto start = std::chrono::high_resolution_clock::now();
-
-        const auto candidates = searcher.search(window);
-
-        auto end = std::chrono::high_resolution_clock::now();
-
-        std::chrono::duration<double, std::milli> duration = end - start;
-
-        std::cout << "candidates found: " << candidates.size() << std::endl;
-        greedy.apply(window, candidates);
-
-        std::cout << "Time taken: " << duration.count() << " ms" << std::endl;
-        std::cout << "diff: " << weight_before - bm.weight() << std::endl;
-
+        print_snapshot(snapshot);
+        std::cout << "best_individual.size=" << best.size() << "\n";
     } catch (const std::exception& ex) {
-        std::cout << "cuda search error: " << ex.what() << '\n';
+        std::cerr << "ga runtime error: " << ex.what() << "\n";
+        return 1;
     }
 
     return 0;

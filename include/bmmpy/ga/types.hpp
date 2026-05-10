@@ -17,6 +17,7 @@ struct StopCriteria {
     std::optional<std::size_t> max_generations;
     std::optional<std::size_t> max_stale_generations;
     std::optional<std::uint64_t> target_total_weight;
+    // todo: add time-based stopping criteria
 };
 
 struct RunStats {

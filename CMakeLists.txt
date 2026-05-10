@@ -75,6 +75,7 @@ target_sources(
         src/ga/island.cpp
         src/ga/bounded_channel.cpp
         src/ga/island_model.cpp
+        src/ga/genetic_algorithm.cpp
 )
 
 target_include_directories(
