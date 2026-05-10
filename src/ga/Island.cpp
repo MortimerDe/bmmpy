@@ -32,10 +32,7 @@ public:
 
     ~Impl() {
         request_stop();
-        try {
-            wait();
-        } catch (...) {
-        }
+        join_noexcept();
     }
 
     void initialize(const RowWindow& window) {
@@ -88,15 +85,7 @@ public:
             worker.join();
         }
 
-        std::exception_ptr failure_copy;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex);
-            failure_copy = failure;
-        }
-
-        if (failure_copy) {
-            std::rethrow_exception(failure_copy);
-        }
+        rethrow_if_failed();
     }
 
     bool is_running() const noexcept { return running.load(std::memory_order_acquire); }
@@ -135,6 +124,27 @@ public:
     std::size_t island_id() const noexcept { return spec.island_id; }
 
 private:
+    void join_noexcept() noexcept {
+        try {
+            if (worker.joinable()) {
+                worker.join();
+            }
+        } catch (...) {
+        }
+    }
+
+    void rethrow_if_failed() {
+        std::exception_ptr failure_copy;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex);
+            failure_copy = failure;
+        }
+
+        if (failure_copy) {
+            std::rethrow_exception(failure_copy);
+        }
+    }
+
     void loop() noexcept {
         try {
             while (!stop_requested.load(std::memory_order_acquire)) {
