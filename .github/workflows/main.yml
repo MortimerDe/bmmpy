@@ -142,6 +142,7 @@ jobs:
           CIBW_BUILD: cp312-*
           CIBW_ARCHS: auto64
           CIBW_MANYLINUX_X86_64_IMAGE: demortimer/manylinux-cuda:13-0
+          CIBW_CONFIG_SETTINGS: wheel.build-tag=1cu13
           CIBW_ENVIRONMENT: >-
             CMAKE_ARGS="-DBMMPY_ENABLE_CUDA=ON -DBMMPY_CUDA_STATIC_RUNTIME=ON -DCMAKE_CUDA_ARCHITECTURES=all-major"
             CUDACXX=/usr/local/cuda/bin/nvcc
