@@ -6,10 +6,10 @@ option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" OFF)
 option(BMMPY_CUDA_STATIC_RUNTIME "Link CUDA runtime statically for CUDA builds" OFF)
 
 # Global project settings
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # bmmpy_core is linked into the Python extension, so it must be PIC-safe.
@@ -70,6 +70,7 @@ target_sources(
 
         src/algebra/transforms.cpp
         src/algebra/mastrovito.cpp
+        src/algebra/transform_utils.cpp
 )
 
 target_include_directories(
