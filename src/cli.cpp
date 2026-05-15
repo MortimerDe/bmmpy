@@ -1,4 +1,5 @@
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/row_window.hpp"
 #include "bmmpy/ga/genetic_algorithm.hpp"
 #include "bmmpy/ga/island_model.hpp"
 #include "bmmpy/ga/migration/bounded_channel.hpp"
@@ -8,102 +9,160 @@
 #include <memory>
 #include <print>
 #include <vector>
+#include <numeric>
+#include <fstream>
+#include <string>
+#include <algorithm>
 
 namespace {
 
+// Загрузка матрицы из текстового файла
+bmmpy::BitMatrix load_matrix_from_file(const std::string& filename) {
+    try {
+        auto matrix = bmmpy::BitMatrix::load_text(filename);
+        std::println("Loaded matrix from '{}': {}x{}, weight={}", 
+                     filename, matrix.rows(), matrix.cols(), matrix.weight());
+        return matrix;
+    } catch (const std::exception& ex) {
+        std::println("Error loading matrix from '{}': {}", filename, ex.what());
+        throw;
+    }
+}
+
+// Демо-матрица для тестирования
 bmmpy::BitMatrix make_demo_matrix() {
     bmmpy::BitMatrix matrix(4, 8);
-
-    matrix.set(0, 0, true);
-    matrix.set(0, 1, true);
-    matrix.set(0, 4, true);
-
-    matrix.set(1, 1, true);
-    matrix.set(1, 2, true);
-    matrix.set(1, 5, true);
-
-    matrix.set(2, 2, true);
-    matrix.set(2, 3, true);
-    matrix.set(2, 6, true);
-
-    matrix.set(3, 0, true);
-    matrix.set(3, 3, true);
-    matrix.set(3, 7, true);
-
+    matrix.set(0, 0, true); matrix.set(0, 1, true); matrix.set(0, 4, true);
+    matrix.set(1, 1, true); matrix.set(1, 2, true); matrix.set(1, 5, true);
+    matrix.set(2, 2, true); matrix.set(2, 5, true); matrix.set(2, 6, true);
+    matrix.set(3, 0, true); matrix.set(3, 3, true); matrix.set(3, 7, true);
     return matrix;
 }
 
-void print_snapshot(const bmmpy::ga::IslandModelSnapshot& snapshot) {
-    std::println("model.running={}", snapshot.running);
-    std::println("model.stop_requested={}", snapshot.stop_requested);
-    std::println("model.island_count={}", snapshot.island_count);
-    std::println("model.total_generations={}", snapshot.total_generations);
-    std::println("model.best_score={}", snapshot.best_score);
-
-    for (const auto& island : snapshot.islands) {
-        std::println("  island[{}] running={} finished={} generations={} best_score={}",
-                     island.island_id,
-                     island.running,
-                     island.finished,
-                     island.stats.generations,
-                     island.best_score);
+// Печать матрицы
+void print_matrix(const std::string& title, const bmmpy::BitMatrix& matrix) {
+    std::println("{} ({}x{}, weight={}):", title, matrix.rows(), matrix.cols(), matrix.weight());
+    for (std::size_t r = 0; r < matrix.rows(); ++r) {
+        std::print("  row {}: ", r);
+        for (std::size_t c = 0; c < matrix.cols(); ++c) {
+            std::print("{}", matrix.get(r, c) ? '1' : '0');
+        }
+        std::println(" (w={})", matrix.row_popcount(r));
     }
+}
+
+// Печать Individual
+void print_individual(const bmmpy::ga::Individual& ind, const bmmpy::RowWindow& window) {
+    std::println("Individual ({} candidates):", ind.size());
+    for (std::size_t i = 0; i < ind.size(); ++i) {
+        std::print("  T[{}] = [", i);
+        for (std::size_t j = 0; j < window.size(); ++j) {
+            std::print("{}", ind[i].has_row(j) ? '1' : '0');
+        }
+        std::println("] weight={}", ind[i].weight);
+    }
+}
+
+// Применение Individual к матрице через RowWindow
+bmmpy::BitMatrix apply_individual(
+    const bmmpy::BitMatrix& original,
+    const bmmpy::RowWindow& window,
+    const bmmpy::ga::Individual& ind)
+{
+    const std::size_t N = window.size();
+    const std::size_t M = original.cols();
+    
+    bmmpy::BitMatrix result(N, M);
+    
+    for (std::size_t out = 0; out < N; ++out) {
+        std::vector<bool> row(M, false);
+        for (std::size_t src = 0; src < N; ++src) {
+            if (ind[out].has_row(src)) {
+                for (std::size_t c = 0; c < M; ++c) {
+                    row[c] = row[c] != window.get(src, c);
+                }
+            }
+        }
+        for (std::size_t c = 0; c < M; ++c) {
+            result.set(out, c, row[c]);
+        }
+    }
+    
+    return result;
+}
+
+// Проверка существования файла
+bool file_exists(const std::string& filename) {
+    std::ifstream file(filename);
+    return file.good();
 }
 
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    std::println("=== BM-MPY Genetic Algorithm ===\n");
     std::println("Version: {}", bmmpy::get_version());
 
-    bmmpy::BitMatrix matrix = make_demo_matrix();
-    bmmpy::RowWindow window = matrix.row_window(std::vector<std::size_t>{0, 1, 2, 3});
+    bmmpy::BitMatrix matrix;
+    
+    std::string filename = "matrix.txt";
+    if (argc > 1) {
+        filename = argv[1];
+    }
+    
+    if (file_exists(filename)) {
+        std::println("Loading matrix from '{}'...", filename);
+        try {
+            matrix = load_matrix_from_file(filename);
+        } catch (const std::exception& ex) {
+            std::println("Failed to load '{}', using demo matrix", filename);
+            matrix = make_demo_matrix();
+        }
+    } else {
+        std::println("File '{}' not found, using demo matrix", filename);
+        matrix = make_demo_matrix();
+    }
 
-    std::vector<bmmpy::ga::GeneticAlgorithmConfig> configs(3);
-    configs[0].seed = 11;
-    configs[0].stop.max_generations = 8;
+    print_matrix("Original matrix", matrix);
 
-    configs[1].seed = 22;
-    configs[1].stop.max_generations = 12;
+    std::vector<std::size_t> row_indices(matrix.rows());
+    std::iota(row_indices.begin(), row_indices.end(), 0);
+    bmmpy::RowWindow window = matrix.row_window(row_indices);
+    std::println("Window size: {}\n", window.size());
 
-    configs[2].seed = 33;
-    configs[2].stop.max_generations = 16;
+    bmmpy::ga::GeneticAlgorithmConfig config;
+    config.population_size = 20;
+    config.mutation_rate = 0.3;
+    config.elite_count = 3;
+    config.tournament_size = 3;
+    config.seed = 42;
+    config.stop.max_generations = 1;
+    config.stop.max_stale_generations = 20;
+    bmmpy::ga::GeneticAlgorithm ga(config);
+    
+    std::println("Starting optimization...\n");
+    auto best_individual = ga.optimize(window);
+    auto best_score = ga.best_score();
+    auto stats = ga.stats();
 
-    bmmpy::ga::IslandModelConfig model_config{{
-        {0,
-         {.interval_generations = 2,
-          .export_count = 1,
-          .import_count = 1,
-          .shared_pool_capacity = 16}},
-        {1,
-         {.interval_generations = 3,
-          .export_count = 1,
-          .import_count = 1,
-          .shared_pool_capacity = 16}},
-        {2,
-         {.interval_generations = 4,
-          .export_count = 1,
-          .import_count = 1,
-          .shared_pool_capacity = 16}},
-    }};
+    std::println("\n=== Results ===");
+    std::println("Generations: {}", stats.generations);
+    std::println("Evaluations: {}", stats.evaluations);
+    std::println("Best score: {}", best_score);
+    std::println("Improvement: {} -> {} (-{})\n", 
+                 matrix.weight(), best_score, matrix.weight() - best_score);
 
-    bmmpy::ga::AlgorithmFactory factory =
-        [configs](const bmmpy::ga::IslandSpec& spec) -> std::unique_ptr<bmmpy::ga::Algorithm> {
-        return std::make_unique<bmmpy::ga::GeneticAlgorithm>(configs.at(spec.island_id));
-    };
+    print_individual(best_individual, window);
 
-    auto channel = std::make_unique<bmmpy::ga::migration::BoundedChannel>(16);
+    auto result = apply_individual(matrix, window, best_individual);
+    print_matrix("\nOptimized matrix", result);
 
-    bmmpy::ga::IslandModel model(std::move(model_config), std::move(factory), std::move(channel));
-
+    std::string output_filename = "optimized_matrix.txt";
     try {
-        const auto best = model.run_to_completion(window);
-        const auto snapshot = model.snapshot();
-
-        print_snapshot(snapshot);
-        std::println("best_individual.size={}", best.size());
+        result.save_text(output_filename);
+        std::println("\nResult saved to '{}'", output_filename);
     } catch (const std::exception& ex) {
-        std::cerr << "ga runtime error: " << ex.what() << "\n";
-        return 1;
+        std::println("\nCould not save result: {}", ex.what());
     }
 
     return 0;

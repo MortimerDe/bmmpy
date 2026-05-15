@@ -6,18 +6,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <random>
 #include <vector>
 
 namespace bmmpy::ga {
 
 struct GeneticAlgorithmConfig {
-    std::size_t population_size = 128;
-    std::size_t elite_count = 8;
-    std::size_t tournament_size = 4;
-
-    double crossover_rate = 0.9;
-    double mutation_rate = 0.05;
-
+    std::size_t population_size = 300;
+    std::size_t elite_count = 3;
+    std::size_t tournament_size = 3;
+    double mutation_rate = 0.3;
     StopCriteria stop;
     std::uint64_t seed = 0;
 };
@@ -45,12 +43,37 @@ public:
     const char* name() const noexcept override { return "ga"; }
 
 private:
+    std::size_t evaluate_individual(const Individual& ind) const;
+    void recalc_all_weights(Individual& ind);
+    //bool is_non_singular(const Individual& ind) const;
+    //void ensure_non_singular(Individual& ind);
+    void adapt_mutation_rate();
+
+    Individual tournament_selection();
+    inline Individual crossover(const Individual& a, const Individual& b);
+    void mutate(Individual& ind);
+    void local_improvement(Individual& ind);
+
+    Individual make_identity() const;
+    Individual make_random();
+    //Individual make_heuristic();
+
     GeneticAlgorithmConfig _config;
-    Individual _best_individual;
     RunStats _stats{};
+    Individual _best_individual;
     std::size_t _best_score = 0;
     bool _initialized = false;
     bool _done = false;
+
+    const RowWindow* _window = nullptr;
+    std::size_t _N = 0;
+    std::size_t _M = 0;
+
+    std::vector<Individual> _population;
+    std::vector<std::size_t> _fitnesses;
+
+    std::size_t _no_improvement = 0;
+    std::mt19937 _rng;
 };
 
 } // namespace bmmpy::ga
