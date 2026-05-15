@@ -108,6 +108,121 @@ bool file_exists(const std::string& filename) {
 
 } // namespace
 
+
+bmmpy::ga::GeneticAlgorithmConfig make_ga_config_for_island(std::size_t island_id,
+                                                            std::uint64_t base_seed) {
+    bmmpy::ga::GeneticAlgorithmConfig cfg;
+
+    cfg.stop.max_generations = 1000;
+    cfg.stop.max_stale_generations = 1000;
+
+    switch (island_id % 4) {
+    case 0:
+        cfg.population_size = 50;
+        cfg.elite_count = 3;
+        cfg.tournament_size = 2;
+        cfg.mutation_rate = 0.20;
+        cfg.seed = base_seed + 1;
+        break;
+
+    case 1:
+        cfg.population_size = 100;
+        cfg.elite_count = 3;
+        cfg.tournament_size = 2;
+        cfg.mutation_rate = 0.30;
+        cfg.seed = base_seed + 2;
+        break;
+
+    case 2:
+        cfg.population_size = 150;
+        cfg.elite_count = 4;
+        cfg.tournament_size = 3;
+        cfg.mutation_rate = 0.45;
+        cfg.seed = base_seed + 3;
+        break;
+
+    default:
+        cfg.population_size = 200;
+        cfg.elite_count = 2;
+        cfg.tournament_size = 10;
+        cfg.mutation_rate = 1.0;
+        cfg.seed = base_seed + 4;
+        break;
+    }
+
+    return cfg;
+}
+
+bmmpy::ga::IslandModelConfig make_island_model_config() {
+    bmmpy::ga::IslandModelConfig model_cfg;
+
+    {
+        bmmpy::ga::IslandSpec spec;
+        spec.island_id = 0;
+        spec.migration.interval_generations = 12;
+        spec.migration.export_count = 2;
+        spec.migration.import_count = 2;
+        model_cfg.islands.push_back(spec);
+    }
+
+    {
+        bmmpy::ga::IslandSpec spec;
+        spec.island_id = 1;
+        spec.migration.interval_generations = 8;
+        spec.migration.export_count = 2;
+        spec.migration.import_count = 2;
+        model_cfg.islands.push_back(spec);
+    }
+
+    {
+        bmmpy::ga::IslandSpec spec;
+        spec.island_id = 2;
+        spec.migration.interval_generations = 16;
+        spec.migration.export_count = 3;
+        spec.migration.import_count = 1;
+        model_cfg.islands.push_back(spec);
+    }
+
+    {
+        bmmpy::ga::IslandSpec spec;
+        spec.island_id = 3;
+        spec.migration.interval_generations = 10;
+        spec.migration.export_count = 1;
+        spec.migration.import_count = 3;
+        model_cfg.islands.push_back(spec);
+    }
+
+    return model_cfg;
+}
+
+void print_island_model_snapshot(const bmmpy::ga::IslandModelSnapshot& snapshot) {
+    std::uint64_t total_evaluations = 0;
+
+    std::println("Island model summary:");
+    std::println("  running={} stop_requested={} island_count={} total_generations={} best_score={}",
+                 snapshot.running,
+                 snapshot.stop_requested,
+                 snapshot.island_count,
+                 snapshot.total_generations,
+                 snapshot.best_score);
+
+    for (const auto& island : snapshot.islands) {
+        total_evaluations += island.stats.evaluations;
+
+        std::println("  island={} best={} gen={} evals={} stale={} running={} finished={}",
+                     island.island_id,
+                     island.best_score,
+                     island.stats.generations,
+                     island.stats.evaluations,
+                     island.stats.stale_generations,
+                     island.running,
+                     island.finished);
+    }
+
+    std::println("  total_evaluations={}", total_evaluations);
+}
+
+
 int main(int argc, char* argv[]) {
     std::println("=== BM-MPY Genetic Algorithm ===\n");
     std::println("Version: {}", bmmpy::get_version());
@@ -139,52 +254,76 @@ int main(int argc, char* argv[]) {
     bmmpy::RowWindow window = matrix.row_window(row_indices);
     std::println("Window size: {}\n", window.size());
 
-    bmmpy::ga::GeneticAlgorithmConfig config;
-    config.population_size = 300;
-    config.mutation_rate = 1.0;
-    config.elite_count = 3;
-    config.tournament_size = 2;
-    config.seed = 666;
-    config.stop.max_generations = 1000;
-    config.stop.max_stale_generations = 1000;
-    bmmpy::ga::GeneticAlgorithm ga(config);
+    constexpr bool k_use_island_model = true;
+    const std::uint64_t base_seed = 42;
+
+    bmmpy::ga::Individual best_individual;
+    std::size_t best_score = 0;
 
     std::println("Starting optimization...\n");
 
-    using steady_clock = std::chrono::steady_clock;
-    const auto opt_start = steady_clock::now();
-    // auto best_individual = ga.optimize(window);
+    if (k_use_island_model) {
+        const bmmpy::ga::IslandModelConfig model_cfg = make_island_model_config();
 
-    std::size_t i = 0;
-    ga.initialize(window);
-    while (!ga.done()){
-        ga.step();
-        std::println("[ga:iter-{} best score: {}, generations: {}, evaluations: {}",
-                    i++,
-                    ga.best_score(),
-                    ga.stats().generations,
-                    ga.stats().evaluations);
+        bmmpy::ga::AlgorithmFactory factory =
+            [base_seed](const bmmpy::ga::IslandSpec& spec) -> std::unique_ptr<bmmpy::ga::Algorithm> {
+            return std::make_unique<bmmpy::ga::GeneticAlgorithm>(
+                make_ga_config_for_island(spec.island_id, base_seed));
+        };
+
+        auto channel = std::make_unique<bmmpy::ga::migration::BoundedChannel>(
+            256,
+            bmmpy::ga::migration::OverflowPolicy::DropOldest);
+
+        bmmpy::ga::IslandModel island_model(model_cfg, std::move(factory), std::move(channel));
+
+        best_individual = island_model.run_to_completion(window);
+
+        const bmmpy::ga::IslandModelSnapshot snapshot = island_model.snapshot();
+        best_score = snapshot.best_score;
+
+        std::println("\n=== Results (Island Model) ===");
+        print_island_model_snapshot(snapshot);
+    } else {
+        bmmpy::ga::GeneticAlgorithmConfig config;
+        config.population_size = 32;
+        config.mutation_rate = 0.3;
+        config.elite_count = 3;
+        config.tournament_size = 2;
+        config.seed = base_seed;
+        config.stop.max_generations = 400;
+        config.stop.max_stale_generations = 120;
+
+        bmmpy::ga::GeneticAlgorithm ga(config);
+
+        best_individual = ga.optimize(window);
+        best_score = ga.best_score();
+
+        const auto stats = ga.stats();
+
+        std::println("\n=== Results (Single GA) ===");
+        std::println("Generations: {}", stats.generations);
+        std::println("Evaluations: {}", stats.evaluations);
+        std::println("Best score: {}", best_score);
     }
-    auto best_individual = ga.best_individual();
-
-    const auto opt_end = steady_clock::now();
-    const auto opt_duration = std::chrono::duration_cast<std::chrono::milliseconds>(opt_end - opt_start).count();
-    std::println("opt completed in {} ms", opt_duration);
-
-    auto best_score = ga.best_score();
-    auto stats = ga.stats();
-
-    std::println("\n=== Results ===");
-    std::println("Generations: {}", stats.generations);
-    std::println("Evaluations: {}", stats.evaluations);
-    std::println("Best score: {}", best_score);
-    std::println(
-        "Improvement: {} -> {} (-{})\n", matrix.weight(), best_score, matrix.weight() - best_score);
-
-    // print_individual(best_individual, window);
 
     auto result = apply_individual(matrix, window, best_individual);
-    // print_matrix("\nOptimized matrix", result);
+    const std::uint64_t result_weight = result.weight();
+    const std::int64_t delta =
+        static_cast<std::int64_t>(matrix.weight()) - static_cast<std::int64_t>(result_weight);
+
+    std::println("Applied result weight: {}", result_weight);
+    if (result_weight != best_score) {
+        std::println("WARNING: cached best score != applied result weight ({} != {})",
+                     best_score,
+                     result_weight);
+    }
+
+    if (delta >= 0) {
+        std::println("Improvement: {} -> {} (-{})\n", matrix.weight(), result_weight, delta);
+    } else {
+        std::println("Worsening: {} -> {} (+{})\n", matrix.weight(), result_weight, -delta);
+    }
 
     std::string output_filename = "optimized_matrix.txt";
     try {

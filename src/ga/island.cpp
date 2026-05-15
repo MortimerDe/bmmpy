@@ -50,8 +50,9 @@ public:
         owned_rows.resize(materialized_window.rows());
         std::iota(owned_rows.begin(), owned_rows.end(), std::size_t{0});
 
-        RowWindow owned_window(materialized_window, owned_rows);
-        algorithm->initialize(owned_window);
+        owned_window.reset();
+        owned_window = std::make_unique<RowWindow>(materialized_window, owned_rows);
+        algorithm->initialize(*owned_window);
 
         initialized = true;
         stop_requested.store(false, std::memory_order_release);
@@ -235,6 +236,7 @@ private:
 
     BitMatrix materialized_window;
     std::vector<std::size_t> owned_rows;
+    std::unique_ptr<RowWindow> owned_window;
 
     bool initialized = false;
     std::atomic<bool> running{false};

@@ -76,6 +76,8 @@ std::size_t GeneticAlgorithm::best_score() const { return _best_score; }
 std::vector<Individual> GeneticAlgorithm::export_migrants(std::size_t max_count) {
     if (max_count == 0 || _best_individual.empty())
         return {};
+
+    // std::print("exporting migrant: {} {} {}\n", _best_score, _stats.generations, _stats.stale_generations);
     return {_best_individual};
 }
 
@@ -104,6 +106,7 @@ void GeneticAlgorithm::import_migrants(std::vector<Individual> migrants) {
         _fitnesses[worst_idx] = score;
     }
 
+    // std::print("import migrants: {} {} {}\n", _best_score, _stats.generations, _stats.stale_generations);
     _done = internal::should_stop(_config, _stats, _best_score);
 }
 
