@@ -2,6 +2,7 @@
 
 #include "bmmpy/ga/genetic_algorithm_internal.hpp"
 
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/detail/xor_basis.hpp"
 
 #include <algorithm>
@@ -29,7 +30,7 @@ Individual GeneticAlgorithm::tournament_selection() {
 
 Individual GeneticAlgorithm::crossover(const Individual& lhs, const Individual& rhs) {
     const auto crossover_started = internal::steady_clock::now();
-    std::println("[ga:crossover:start] lhs={} rhs={} elapsed_ms=0", lhs.size(), rhs.size());
+    // std::println("[ga:crossover:start] lhs={} rhs={} elapsed_ms=0", lhs.size(), rhs.size());
 
     std::vector<const Candidate*> pool;
     pool.reserve(lhs.size() + rhs.size());
@@ -40,6 +41,8 @@ Individual GeneticAlgorithm::crossover(const Individual& lhs, const Individual& 
         pool.push_back(&candidate);
 
     std::stable_sort(pool.begin(), pool.end(), [](const Candidate* left, const Candidate* right) {
+        if (left->weight != right->weight)
+            return left->weight < right->weight;
         return left->mask_popcount() < right->mask_popcount();
     });
 
@@ -61,19 +64,36 @@ Individual GeneticAlgorithm::crossover(const Individual& lhs, const Individual& 
             child.push_back(Candidate(std::move(unit_mask), 1));
     }
 
-    std::println("[ga:crossover:done] child_size={} rank={} elapsed_ms={}",
-                 child.size(),
-                 pivot.rank(),
-                 internal::elapsed_ms(crossover_started));
+    // std::println("[ga:crossover:done] child_size={} rank={} elapsed_ms={}",
+    //              child.size(),
+    //              pivot.rank(),
+    //              internal::elapsed_ms(crossover_started));
     return child;
 }
 
+
 void GeneticAlgorithm::mutate(Individual& ind) {
     const auto mutate_started = internal::steady_clock::now();
-    const std::size_t mutation_count = std::max<std::size_t>(1, _N * _config.mutation_rate);
-    std::uniform_int_distribution<std::size_t> distribution(0, _N - 1);
+    const std::size_t candidate_count = ind.size();
 
-    std::println("[ga:mutate:start] n={} rows={} elapsed_ms=0", mutation_count, _N);
+    if (candidate_count < 2) {
+        // std::println("[ga:mutate:start] n=0 rows={} elapsed_ms=0", candidate_count);
+        // std::println("[ga:mutate:done] n=0 elapsed_ms={}", internal::elapsed_ms(mutate_started));
+        return;
+    }
+
+    const std::size_t mutation_count =
+        std::max<std::size_t>(1, static_cast<std::size_t>(candidate_count * _config.mutation_rate));
+    std::uniform_int_distribution<std::size_t> distribution(0, candidate_count - 1);
+
+    ::bmmpy::BitMatrix scratch_storage;
+    std::uint64_t* scratch_words = nullptr;
+    if (_M != 0) {
+        scratch_storage = ::bmmpy::BitMatrix(1, _M);
+        scratch_words = scratch_storage.row_words(0);
+    }
+
+    // std::println("[ga:mutate:start] n={} rows={} elapsed_ms=0", mutation_count, candidate_count);
 
     for (std::size_t k = 0; k < mutation_count; ++k) {
         const std::size_t i = distribution(_rng);
@@ -81,77 +101,87 @@ void GeneticAlgorithm::mutate(Individual& ind) {
         if (i == j)
             continue;
 
-        std::println("[ga:mutate:iter:start] iter={} i={} j={} elapsed_ms={}",
-                     k,
-                     i,
-                     j,
-                     internal::elapsed_ms(mutate_started));
+        // std::println("[ga:mutate:iter:start] iter={} i={} j={} elapsed_ms={}",
+                     // k,
+                     // i,
+                     // j,
+                     // internal::elapsed_ms(mutate_started));
 
         for (std::size_t w = 0; w < ind[i].mask.size(); ++w)
             ind[i].mask[w] ^= ind[j].mask[w];
 
-        recalc_all_weights(ind);
+        ind[i].weight = internal::eval_cand_weight(*_window, _N, _M, ind[i], scratch_words);
 
-        std::println(
-            "[ga:mutate:iter:done] iter={} elapsed_ms={}", k, internal::elapsed_ms(mutate_started));
+        // std::println(
+            // "[ga:mutate:iter:done] iter={} elapsed_ms={}", k, internal::elapsed_ms(mutate_started));
     }
 
-    std::println("[ga:mutate:done] n={} elapsed_ms={}",
-                 mutation_count,
-                 internal::elapsed_ms(mutate_started));
+    // std::println("[ga:mutate:done] n={} elapsed_ms={}",
+    //              mutation_count,
+    //              internal::elapsed_ms(mutate_started));
 }
 
-// todo: слишком медленный, надо доработать
 void GeneticAlgorithm::local_improvement(Individual& ind) {
-    const auto improve_started = internal::steady_clock::now();
-    std::println("[ga:local:start] rows={} elapsed_ms=0", _N);
+    const std::size_t candidate_count = ind.size();
+    if (candidate_count < 2 || _M == 0)
+        return;
 
-    for (std::size_t iter = 0; iter < 10; ++iter) {
+    ::bmmpy::BitMatrix materialized(candidate_count, _M);
+
+    for (std::size_t i = 0; i < candidate_count; ++i) {
+        internal::mat_cand(*_window, _N, ind[i], materialized.row_words(i));
+        ind[i].weight = static_cast<std::uint32_t>(materialized.row_popcount(i));
+    }
+
+    const auto& ops = ::bmmpy::detail::bit_ops();
+    const std::size_t word_count = materialized.words_per_row();
+    constexpr std::size_t k_local_improvement_iters = 10;
+
+    for (std::size_t iter = 0; iter < k_local_improvement_iters; ++iter) {
         bool improved = false;
-        std::println("[ga:local:iter:start] iter={} elapsed_ms={}",
-                     iter,
-                     internal::elapsed_ms(improve_started));
 
-        for (std::size_t i = 0; i < _N; ++i) {
-            for (std::size_t j = 0; j < _N; ++j) {
+        for (std::size_t i = 0; i < candidate_count; ++i) {
+            const std::uint64_t wi = ind[i].weight;
+            if (wi == 0)
+                continue;
+
+            const std::uint64_t* const row_i = materialized.row_words(i);
+
+            std::size_t best_j = candidate_count;
+            std::uint64_t best_weight = wi;
+
+            for (std::size_t j = 0; j < candidate_count; ++j) {
                 if (i == j)
                     continue;
 
-                Candidate::mask_type old_mask = ind[i].mask;
-                const std::uint32_t old_weight = ind[i].weight;
+                const std::uint64_t wj = ind[j].weight;
+                if (wj >= 2ull * wi)
+                    continue;
 
-                for (std::size_t w = 0; w < ind[i].mask.size(); ++w)
-                    ind[i].mask[w] ^= ind[j].mask[w];
+                const std::uint64_t overlap =
+                    ops.row_and_popcount(row_i, materialized.row_words(j), word_count);
+                const std::uint64_t candidate_weight = wi + wj - 2ull * overlap;
 
-                const std::uint32_t new_weight = internal::eval_cand_weight(*_window, _N, _M, ind[i]);
-
-                if (new_weight < old_weight) {
-                    ind[i].weight = new_weight;
-                    std::println("[ga:local:improved] iter={} i={} j={} old_w={} new_w={} "
-                                 "elapsed_ms={}",
-                                 iter,
-                                 i,
-                                 j,
-                                 old_weight,
-                                 new_weight,
-                                 internal::elapsed_ms(improve_started));
-                    improved = true;
-                    break;
+                if (candidate_weight < best_weight) {
+                    best_weight = candidate_weight;
+                    best_j = j;
                 }
-
-                ind[i].mask = std::move(old_mask);
-                ind[i].weight = old_weight;
             }
 
-            if (improved)
-                break;
+            if (best_j == candidate_count)
+                continue;
+
+            for (std::size_t w = 0; w < ind[i].mask.size(); ++w)
+                ind[i].mask[w] ^= ind[best_j].mask[w];
+
+            materialized.row_xor(i, best_j);
+            ind[i].weight = static_cast<std::uint32_t>(best_weight);
+            improved = true;
         }
 
         if (!improved)
             break;
     }
-
-    std::println("[ga:local:done] elapsed_ms={}", internal::elapsed_ms(improve_started));
 }
 
 } // namespace bmmpy::ga

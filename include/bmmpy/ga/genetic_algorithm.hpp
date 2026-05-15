@@ -57,6 +57,7 @@ private:
     // Initialization
     Individual make_identity() const;
     Individual make_random();
+    Individual make_heuristic();
 
     GeneticAlgorithmConfig _config;
     RunStats _stats{};

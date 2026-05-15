@@ -1,6 +1,7 @@
 #include "bmmpy/ga/genetic_algorithm.hpp"
 #include "bmmpy/ga/genetic_algorithm_internal.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <print>
 #include <random>
@@ -19,8 +20,6 @@ Individual GeneticAlgorithm::make_identity() const {
 
 Individual GeneticAlgorithm::make_random() {
     const auto random_started = internal::steady_clock::now();
-    std::println("[ga:random:start] rows={} cols={} elapsed_ms=0", _N, _M);
-
     Individual individual = make_identity();
     std::uniform_int_distribution<std::size_t> distribution(0, _N - 1);
 
@@ -30,23 +29,60 @@ Individual GeneticAlgorithm::make_random() {
         if (i == j)
             continue;
 
-        std::println("[ga:random:xor] iter={} i={} j={} elapsed_ms={}",
-                     k,
-                     i,
-                     j,
-                     internal::elapsed_ms(random_started));
-
         for (std::size_t w = 0; w < individual[i].mask.size(); ++w)
             individual[i].mask[w] ^= individual[j].mask[w];
     }
 
-    std::println("[ga:random] before_recalc elapsed_ms={}", internal::elapsed_ms(random_started));
     recalc_all_weights(individual);
-
-    std::println("[ga:random:done] score={} elapsed_ms={}",
-                 evaluate_individual(individual),
-                 internal::elapsed_ms(random_started));
     return individual;
 }
+
+Individual GeneticAlgorithm::make_heuristic() {
+    Individual individual = make_identity();
+    if (_N < 2)
+        return individual;
+
+    std::vector<std::size_t> sorted_indices(_N);
+    for (std::size_t i = 0; i < _N; ++i)
+        sorted_indices[i] = i;
+
+    std::stable_sort(
+        sorted_indices.begin(), sorted_indices.end(), [&](std::size_t lhs, std::size_t rhs) {
+            return individual[lhs].weight > individual[rhs].weight;
+        });
+
+    const std::size_t probe_count = std::min<std::size_t>(5, _N);
+
+    ::bmmpy::BitMatrix scratch_storage(1, _M);
+    std::uint64_t* const scratch_words = scratch_storage.row_words(0);
+
+    for (std::size_t pos = 0; pos < probe_count; ++pos) {
+        const std::size_t i = sorted_indices[pos];
+        std::uint32_t current_weight = individual[i].weight;
+
+        for (std::size_t j = 0; j < _N; ++j) {
+            if (i == j)
+                continue;
+
+            for (std::size_t w = 0; w < individual[i].mask.size(); ++w)
+                individual[i].mask[w] ^= individual[j].mask[w];
+
+            const std::uint32_t candidate_weight =
+                internal::eval_cand_weight(*_window, _N, _M, individual[i], scratch_words);
+
+            if (candidate_weight < current_weight) {
+                individual[i].weight = candidate_weight;
+                current_weight = candidate_weight;
+                break;
+            }
+
+            for (std::size_t w = 0; w < individual[i].mask.size(); ++w)
+                individual[i].mask[w] ^= individual[j].mask[w];
+        }
+    }
+
+    return individual;
+}
+
 
 } // namespace bmmpy::ga

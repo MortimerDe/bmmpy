@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
         matrix = make_demo_matrix();
     }
 
-    print_matrix("Original matrix", matrix);
+    // print_matrix("Original matrix", matrix);
 
     std::vector<std::size_t> row_indices(matrix.rows());
     std::iota(row_indices.begin(), row_indices.end(), 0);
@@ -140,17 +140,37 @@ int main(int argc, char* argv[]) {
     std::println("Window size: {}\n", window.size());
 
     bmmpy::ga::GeneticAlgorithmConfig config;
-    config.population_size = 20;
-    config.mutation_rate = 0.3;
+    config.population_size = 300;
+    config.mutation_rate = 1.0;
     config.elite_count = 3;
-    config.tournament_size = 3;
-    config.seed = 42;
-    config.stop.max_generations = 20;
-    config.stop.max_stale_generations = 20;
+    config.tournament_size = 2;
+    config.seed = 666;
+    config.stop.max_generations = 1000;
+    config.stop.max_stale_generations = 1000;
     bmmpy::ga::GeneticAlgorithm ga(config);
 
     std::println("Starting optimization...\n");
-    auto best_individual = ga.optimize(window);
+
+    using steady_clock = std::chrono::steady_clock;
+    const auto opt_start = steady_clock::now();
+    // auto best_individual = ga.optimize(window);
+
+    std::size_t i = 0;
+    ga.initialize(window);
+    while (!ga.done()){
+        ga.step();
+        std::println("[ga:iter-{} best score: {}, generations: {}, evaluations: {}",
+                    i++,
+                    ga.best_score(),
+                    ga.stats().generations,
+                    ga.stats().evaluations);
+    }
+    auto best_individual = ga.best_individual();
+
+    const auto opt_end = steady_clock::now();
+    const auto opt_duration = std::chrono::duration_cast<std::chrono::milliseconds>(opt_end - opt_start).count();
+    std::println("opt completed in {} ms", opt_duration);
+
     auto best_score = ga.best_score();
     auto stats = ga.stats();
 
@@ -161,10 +181,10 @@ int main(int argc, char* argv[]) {
     std::println(
         "Improvement: {} -> {} (-{})\n", matrix.weight(), best_score, matrix.weight() - best_score);
 
-    print_individual(best_individual, window);
+    // print_individual(best_individual, window);
 
     auto result = apply_individual(matrix, window, best_individual);
-    print_matrix("\nOptimized matrix", result);
+    // print_matrix("\nOptimized matrix", result);
 
     std::string output_filename = "optimized_matrix.txt";
     try {
