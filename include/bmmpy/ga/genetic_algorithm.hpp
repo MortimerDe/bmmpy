@@ -43,20 +43,20 @@ public:
     const char* name() const noexcept override { return "ga"; }
 
 private:
+    // Fitness
     std::size_t evaluate_individual(const Individual& ind) const;
     void recalc_all_weights(Individual& ind);
-    //bool is_non_singular(const Individual& ind) const;
-    //void ensure_non_singular(Individual& ind);
     void adapt_mutation_rate();
 
+    // Operators
     Individual tournament_selection();
-    inline Individual crossover(const Individual& a, const Individual& b);
+    Individual crossover(const Individual& a, const Individual& b);
     void mutate(Individual& ind);
     void local_improvement(Individual& ind);
 
+    // Initialization
     Individual make_identity() const;
     Individual make_random();
-    //Individual make_heuristic();
 
     GeneticAlgorithmConfig _config;
     RunStats _stats{};
