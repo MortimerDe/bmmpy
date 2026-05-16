@@ -4,6 +4,7 @@ project(bmmpy LANGUAGES CXX)
 
 option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" OFF)
 option(BMMPY_CUDA_STATIC_RUNTIME "Link CUDA runtime statically for CUDA builds" OFF)
+option(BMMPY_BUILD_PYTHON "Build the optional Python bindings" ON)
 
 # Global project settings
 set(CMAKE_CXX_STANDARD 23)
@@ -12,7 +13,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-# bmmpy_core is linked into the Python extension, so it must be PIC-safe.
+# Keep the core library PIC-safe so it can be reused from optional shared modules.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(CTest)
@@ -167,53 +168,50 @@ else()
     message(STATUS "CUDA backend disabled")
 endif()
 
-find_package(
-    Python 3.12 REQUIRED
-    COMPONENTS Interpreter Development.Module
-    OPTIONAL_COMPONENTS Development.SABIModule
-)
+if(BMMPY_BUILD_PYTHON)
+    find_package(
+        Python 3.12 REQUIRED
+        COMPONENTS Interpreter Development.Module
+        OPTIONAL_COMPONENTS Development.SABIModule
+    )
 
-add_subdirectory(extern/nanobind)
-
-
-# Python extension module
-nanobind_add_module(
-    _bmmpy
-    NB_DOMAIN bmmpy
-    STABLE_ABI
-    python/bindings/main.cpp
-    python/bindings/bit_matrix.cpp
-    python/bindings/algebra.cpp
-    python/bindings/candidate.cpp
-    python/bindings/search.cpp
-    python/bindings/apply.cpp
-    python/bindings/runtime.cpp
-    python/bindings/math.cpp
-    python/bindings/window.cpp
-    python/bindings/solver.cpp
-)
-
-nanobind_add_stub(
-    bmmpy_stub
-    MODULE _bmmpy
-    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy/_bmmpy.pyi"
-    PYTHON_PATH $<TARGET_FILE_DIR:_bmmpy>
-    DEPENDS _bmmpy
-)
-
-target_link_libraries(_bmmpy PRIVATE bmmpy_core)
-
-# Install the native module inside the Python package directory.
-install(
-    TARGETS _bmmpy
-    LIBRARY DESTINATION bmmpy
-    RUNTIME DESTINATION bmmpy
-)
+    add_subdirectory(extern/nanobind)
 
 
-# Native tools
-add_executable(cli src/cli.cpp)
-target_link_libraries(cli PRIVATE bmmpy_core)
+    # Python extension module
+    nanobind_add_module(
+        _bmmpy
+        NB_DOMAIN bmmpy
+        STABLE_ABI
+        python/bindings/main.cpp
+        python/bindings/bit_matrix.cpp
+        python/bindings/algebra.cpp
+        python/bindings/candidate.cpp
+        python/bindings/search.cpp
+        python/bindings/apply.cpp
+        python/bindings/runtime.cpp
+        python/bindings/math.cpp
+        python/bindings/window.cpp
+        python/bindings/solver.cpp
+    )
+
+    nanobind_add_stub(
+        bmmpy_stub
+        MODULE _bmmpy
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy/_bmmpy.pyi"
+        PYTHON_PATH $<TARGET_FILE_DIR:_bmmpy>
+        DEPENDS _bmmpy
+    )
+
+    target_link_libraries(_bmmpy PRIVATE bmmpy_core)
+
+    # Install the native module inside the Python package directory.
+    install(
+        TARGETS _bmmpy
+        LIBRARY DESTINATION bmmpy
+        RUNTIME DESTINATION bmmpy
+    )
+endif()
 
 
 # Tests
@@ -259,43 +257,45 @@ if(BUILD_TESTING)
     )
     set_tests_properties(algebra_core_tests PROPERTIES LABELS "cpp;algebra")
 
-    execute_process(
-        COMMAND ${Python_EXECUTABLE} -c "import pytest"
-        RESULT_VARIABLE BMMPY_HAS_PYTEST
-        OUTPUT_QUIET
-        ERROR_QUIET
-    )
-
-    if(BMMPY_HAS_PYTEST EQUAL 0)
-        set(BMMPY_TEST_PYTHON_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-python")
-
-        add_custom_command(
-            TARGET _bmmpy POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E rm -rf "${BMMPY_TEST_PYTHON_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${BMMPY_TEST_PYTHON_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy"
-                    "${BMMPY_TEST_PYTHON_DIR}/bmmpy"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$<TARGET_FILE:_bmmpy>"
-                    "${BMMPY_TEST_PYTHON_DIR}/bmmpy/"
-            COMMENT "Staging build-tree bmmpy package for pytest"
+    if(BMMPY_BUILD_PYTHON)
+        execute_process(
+            COMMAND ${Python_EXECUTABLE} -c "import pytest"
+            RESULT_VARIABLE BMMPY_HAS_PYTEST
+            OUTPUT_QUIET
+            ERROR_QUIET
         )
 
-        add_test(
-            NAME python_api_tests
-            COMMAND ${CMAKE_COMMAND} -E env
-                    "PYTHONPATH=${BMMPY_TEST_PYTHON_DIR}"
-                    "BMMPY_EXPECT_CUDA_COMPILED=$<IF:$<BOOL:${BMMPY_ENABLE_CUDA}>,ON,OFF>"
-                    ${Python_EXECUTABLE} -m pytest -q "${CMAKE_CURRENT_SOURCE_DIR}/tests/python"
-        )
-        set_tests_properties(
-            python_api_tests
-            PROPERTIES
-                LABELS "python;api"
-                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        )
-    else()
-        message(STATUS "pytest not available in ${Python_EXECUTABLE}; skipping Python tests")
+        if(BMMPY_HAS_PYTEST EQUAL 0)
+            set(BMMPY_TEST_PYTHON_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-python")
+
+            add_custom_command(
+                TARGET _bmmpy POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E rm -rf "${BMMPY_TEST_PYTHON_DIR}"
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${BMMPY_TEST_PYTHON_DIR}"
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "${CMAKE_CURRENT_SOURCE_DIR}/bmmpy"
+                        "${BMMPY_TEST_PYTHON_DIR}/bmmpy"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "$<TARGET_FILE:_bmmpy>"
+                        "${BMMPY_TEST_PYTHON_DIR}/bmmpy/"
+                COMMENT "Staging build-tree bmmpy package for pytest"
+            )
+
+            add_test(
+                NAME python_api_tests
+                COMMAND ${CMAKE_COMMAND} -E env
+                        "PYTHONPATH=${BMMPY_TEST_PYTHON_DIR}"
+                        "BMMPY_EXPECT_CUDA_COMPILED=$<IF:$<BOOL:${BMMPY_ENABLE_CUDA}>,ON,OFF>"
+                        ${Python_EXECUTABLE} -m pytest -q "${CMAKE_CURRENT_SOURCE_DIR}/tests/python"
+            )
+            set_tests_properties(
+                python_api_tests
+                PROPERTIES
+                    LABELS "python;api"
+                    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            )
+        else()
+            message(STATUS "pytest not available in ${Python_EXECUTABLE}; skipping Python tests")
+        endif()
     endif()
 endif()

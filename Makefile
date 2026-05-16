@@ -8,6 +8,7 @@ CMAKE ?= cmake
 CTEST ?= ctest
 
 ENABLE_CUDA ?= ON
+BUILD_PYTHON ?= ON
 CIBW_BUILD ?= cp312-*
 DIST_DIR ?= dist
 VERSION ?=
@@ -16,11 +17,12 @@ CUDA_MANYLINUX_IMAGE ?= bmmpy-manylinux_2_28-cuda13.0
 CMAKE_ARGS ?= -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DBMMPY_ENABLE_CUDA=$(ENABLE_CUDA) \
+			  -DBMMPY_BUILD_PYTHON=$(BUILD_PYTHON) \
               -DCMAKE_CXX_COMPILER=g++-14 \
               -DCMAKE_C_COMPILER=gcc-14
 CUDA_WHEEL_CMAKE_ARGS ?= -DBMMPY_ENABLE_CUDA=ON -DBMMPY_CUDA_STATIC_RUNTIME=ON -DCMAKE_CUDA_ARCHITECTURES=all-major
 
-.PHONY: help all configure build cli dev test test-py stubs wheel wheel-tools wheel-manylinux wheel-manylinux-cuda clean distclean clean-build bump_ver release
+.PHONY: help all configure configure-core build build-core dev test test-py stubs wheel wheel-tools wheel-manylinux wheel-manylinux-cuda clean distclean clean-build bump_ver release
 
 all: build ## Build default targets
 
@@ -30,11 +32,14 @@ help: ## Show available targets
 configure: ## Configure CMake in $(BUILD_DIR)
 	$(CMAKE) -S . -B $(BUILD_DIR) -G Ninja $(CMAKE_ARGS) $(PYTHON_CMAKE_ARG)
 
+configure-core: ## Configure CMake for the standalone C++ core
+	$(CMAKE) -S . -B $(BUILD_DIR) -G Ninja $(filter-out -DBMMPY_BUILD_PYTHON=%,$(CMAKE_ARGS)) -DBMMPY_BUILD_PYTHON=OFF
+
 build: configure ## Build native targets
 	$(CMAKE) --build $(BUILD_DIR)
 
-cli: build ## Run the CLI executable
-	./$(BUILD_DIR)/cli
+build-core: configure-core ## Build only the standalone C++ core targets
+	$(CMAKE) --build $(BUILD_DIR)
 
 dev: ## Install editable Python package.
 	CMAKE_ARGS="$(CMAKE_ARGS)" $(PIP) install -e .
