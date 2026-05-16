@@ -13,7 +13,11 @@ DIST_DIR ?= dist
 VERSION ?=
 
 CUDA_MANYLINUX_IMAGE ?= bmmpy-manylinux_2_28-cuda13.0
-CMAKE_ARGS ?= -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBMMPY_ENABLE_CUDA=$(ENABLE_CUDA)
+CMAKE_ARGS ?= -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DBMMPY_ENABLE_CUDA=$(ENABLE_CUDA) \
+              -DCMAKE_CXX_COMPILER=g++-14 \
+              -DCMAKE_C_COMPILER=gcc-14
 CUDA_WHEEL_CMAKE_ARGS ?= -DBMMPY_ENABLE_CUDA=ON -DBMMPY_CUDA_STATIC_RUNTIME=ON -DCMAKE_CUDA_ARCHITECTURES=all-major
 
 .PHONY: help all configure build cli dev test test-py stubs wheel wheel-tools wheel-manylinux wheel-manylinux-cuda clean distclean clean-build bump_ver release

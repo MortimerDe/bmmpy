@@ -71,6 +71,14 @@ target_sources(
         src/algebra/transforms.cpp
         src/algebra/mastrovito.cpp
         src/algebra/transform_utils.cpp
+
+        src/ga/island.cpp
+        src/ga/bounded_channel.cpp
+        src/ga/island_model.cpp
+        src/ga/genetic_algorithm_core.cpp
+        src/ga/genetic_algorithm_population.cpp
+        src/ga/genetic_algorithm_operators.cpp
+        src/ga/genetic_algorithm_lifecycle.cpp
 )
 
 target_include_directories(
@@ -148,10 +156,12 @@ if(BMMPY_ENABLE_CUDA)
     )
 
     if(BMMPY_CUDA_STATIC_RUNTIME)
-        target_link_libraries(bmmpy_core PRIVATE CUDA::cudart_static)
+        target_link_libraries(bmmpy_core PUBLIC CUDA::cudart_static)
     else()
-        target_link_libraries(bmmpy_core PRIVATE CUDA::cudart)
+        target_link_libraries(bmmpy_core PUBLIC CUDA::cudart)
     endif()
+    target_link_directories(bmmpy_core PUBLIC ${CUDAToolkit_LIBRARY_DIR})
+    
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_CUDA_BACKEND=1)
 else()
     message(STATUS "CUDA backend disabled")
