@@ -60,8 +60,6 @@ target_sources(
         src/search/split_window_prep.cpp
         src/search/cuda_mitm_fwht_search.cpp
         src/search/bruteforce_search.cpp
-        src/search/cuda_mitm_fwht_search.cpp
-        src/search/bruteforce_search.cpp
         src/search/cuda_bruteforce_search.cpp
         src/search/sa_selector.cpp
         src/search/sa_selector_pairwise.cpp
@@ -193,6 +191,7 @@ if(BMMPY_BUILD_PYTHON)
         python/bindings/math.cpp
         python/bindings/window.cpp
         python/bindings/solver.cpp
+        python/bindings/ga.cpp
     )
 
     nanobind_add_stub(

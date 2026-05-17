@@ -31,7 +31,18 @@ True
 """
 from __future__ import annotations
 
-from . import algebra, solver
+from . import algebra, solver, ga
+from .ga import (
+    GeneticAlgorithm,
+    IslandModel,
+    IslandModelSnapshot,
+    IslandSnapshot,
+    IslandSpec,
+    MigrationPolicy,
+    OverflowPolicy,
+    RunStats,
+    StopCriteria,
+)
 from ._bmmpy import (
     ApplyResult,
     MatrixErr,
@@ -68,6 +79,16 @@ __all__ = [
     "RuntimeFeatures",
     "SASelectionResult",
     "SASelector",
+    "GeneticAlgorithm",
+    "IslandModel",
+    "IslandModelSnapshot",
+    "IslandSnapshot",
+    "IslandSpec",
+    "MigrationPolicy",
+    "OverflowPolicy",
+    "RunStats",
+    "StopCriteria",
+    "ga",
     "add",
     "algebra",
     "solver",

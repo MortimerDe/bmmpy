@@ -53,7 +53,8 @@ PublishResult BoundedChannel::publish_drop_oldest(Batch batch) {
             migrant.generation,
             next_sequence_++,
         });
-        std::println("[channel:publish]: accepted migrant from island {} (generation {})\n", batch.source_island, migrant.generation);
+        // std::println("[channel:publish]: accepted migrant from island {} (generation {})\n",
+        // batch.source_island, migrant.generation);
 
         ++accepted_;
         ++result.accepted;
@@ -137,7 +138,8 @@ std::vector<Migrant> BoundedChannel::try_take(const std::size_t consumer_island,
         ++taken_;
     }
 
-    std::print("[channel:take]: consumer island {} took {} migrants\n", consumer_island, out.size());
+    // std::print("[channel:take]: consumer island {} took {} migrants\n", consumer_island,
+    // out.size());
 
     return out;
 }
