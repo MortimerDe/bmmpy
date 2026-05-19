@@ -63,10 +63,11 @@ wheel-tools: ## Install cibuildwheel
 	$(PIP) install cibuildwheel
 
 wheel-manylinux: wheel-tools ## Build manylinux wheels
-	rm -rf $(DIST_DIR)
-	CIBW_BUILD="$(CIBW_BUILD)" \
-	CIBW_MANYLINUX_X86_64_IMAGE=manylinux2014 \
-	$(PYTHON) -m cibuildwheel --platform linux --output-dir $(DIST_DIR)
+    rm -rf $(DIST_DIR)
+    CIBW_BUILD="$(CIBW_BUILD)" \
+    CIBW_MANYLINUX_X86_64_IMAGE=manylinux2014 \
+    CIBW_ENVIRONMENT='CMAKE_ARGS="-DBMMPY_ENABLE_CUDA=OFF"' \
+    $(PYTHON) -m cibuildwheel --platform linux --output-dir $(DIST_DIR)
 
 wheel-manylinux-cuda: wheel-tools ## Build CUDA manylinux wheels
 	rm -rf $(DIST_DIR)

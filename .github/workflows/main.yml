@@ -1,5 +1,5 @@
 name: release
-run-name: Release ${{ github.ref_name }} (Build #${{ github.run_number }})
+run-name: Release ${{ github.ref_name }}
 
 on:
   push:
@@ -77,8 +77,11 @@ jobs:
           CIBW_BUILD: cp312-*
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-          CIBW_TEST_COMMAND: >
+          CIBW_ENVIRONMENT: >-
+            CMAKE_ARGS="-DBMMPY_ENABLE_CUDA=OFF"
+          CIBW_TEST_COMMAND: >-
             python -c "import bmmpy; f=bmmpy.get_runtime_features();
+            assert not f.cuda_compiled;
             print(bmmpy.__version__);
             print(f.avx2_compiled, f.avx2_available, f.parallel_compiled, f.parallel_enabled, f.max_threads, f.bit_ops_backend, f.fwht_backend);
             print(bmmpy.add(2, 3))"
