@@ -51,6 +51,7 @@ void GeneticAlgorithm::initialize(const RowWindow& window) {
     _best_individual = _population[std::distance(_fitnesses.begin(), best)];
 
     _no_improvement = 0;
+    _catastrophe = 0;
     _stats = RunStats{};
     _stats.seed = _config.seed;
     _stats.evaluations = _population.size();
@@ -76,8 +77,6 @@ std::vector<Individual> GeneticAlgorithm::export_migrants(std::size_t max_count)
     if (max_count == 0 || _best_individual.empty())
         return {};
 
-    // std::print("exporting migrant: {} {} {}\n", _best_score, _stats.generations,
-    // _stats.stale_generations);
     return {_best_individual};
 }
 
@@ -97,6 +96,7 @@ void GeneticAlgorithm::import_migrants(std::vector<Individual> migrants) {
         _best_individual = std::move(migrant);
         _stats.stale_generations = 0;
         _no_improvement = 0;
+        _catastrophe = 0;
 
         auto worst = std::max_element(_fitnesses.begin(), _fitnesses.end());
         const std::size_t worst_idx =
@@ -106,8 +106,6 @@ void GeneticAlgorithm::import_migrants(std::vector<Individual> migrants) {
         _fitnesses[worst_idx] = score;
     }
 
-    // std::print("import migrants: {} {} {}\n", _best_score, _stats.generations,
-    // _stats.stale_generations);
     _done = internal::should_stop(_config, _stats, _best_score);
 }
 
@@ -145,18 +143,21 @@ void GeneticAlgorithm::step() {
             continue;
         }
 
-        Individual parent_a = tournament_selection();
-        Individual parent_b = tournament_selection();
+        std::vector<Individual> parents = tournament_selection();
+        std::vector<Individual> children = crossover(parents);
 
-        Individual child = crossover(parent_a, parent_b);
-        mutate(child);
+        for (Individual& child : children) {
+            if (new_population.size() >= _config.population_size)
+                break;
+            mutate(child);
 
-        if (k_local_improvement_period != 0 &&
-            (_stats.generations % k_local_improvement_period) == 0) {
-            local_improvement(child);
+            if (k_local_improvement_period != 0 &&
+                (_stats.generations % k_local_improvement_period) == 0) {
+                local_improvement(child);
+            }
+
+            new_population.push_back(std::move(child));
         }
-
-        new_population.push_back(std::move(child));
     }
 
     _population = std::move(new_population);
@@ -175,9 +176,24 @@ void GeneticAlgorithm::step() {
         _best_individual = _population[best_idx];
         _stats.stale_generations = 0;
         _no_improvement = 0;
+        _catastrophe = 0;
     } else {
         ++_stats.stale_generations;
         ++_no_improvement;
+        ++_catastrophe;
+    }
+
+    if (!_config.enable_catastrophe && _catastrophe == _config.catastrophe_threshold) {
+        std::println("Catastrophe! No improvement for {} generations", _no_improvement);
+        catastrophe();
+        auto new_best = std::min_element(_fitnesses.begin(), _fitnesses.end());
+        if (*new_best < _best_score) {
+            _best_score = *new_best;
+            _best_individual = _population[std::distance(_fitnesses.begin(), new_best)];
+        }
+
+        _done = internal::should_stop(_config, _stats, _best_score);
+        return;
     }
 
     _done = internal::should_stop(_config, _stats, _best_score);
