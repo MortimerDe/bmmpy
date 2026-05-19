@@ -1,4 +1,5 @@
 #include "bmmpy/core/detail/bit_intrinsics.hpp"
+#include "bmmpy/core/detail/xorshift64.hpp"
 #include "bmmpy/search/sa_selector_internal.hpp"
 
 #include <cmath>
@@ -134,7 +135,7 @@ double estimate_initial_temperature(const BitMatrix& matrix,
                                     const std::vector<std::size_t>& pool,
                                     const std::vector<std::uint32_t>& column_counts,
                                     const SASelectorConfig& config,
-                                    XorShift64& rng) {
+                                    detail::XorShift64& rng) {
     if (pool.empty())
         return 1.0;
 
@@ -169,7 +170,7 @@ double estimate_initial_temperature(const BitMatrix& matrix,
 RestartResult run_higher_order_restart(const BitMatrix& matrix,
                                        std::size_t window_size,
                                        const SASelectorConfig& config,
-                                       XorShift64& rng) {
+                                       detail::XorShift64& rng) {
     std::vector<std::size_t> window;
     std::vector<std::size_t> pool;
     initialize_partition(matrix.rows(), window_size, rng, window, pool);

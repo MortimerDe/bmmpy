@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bmmpy/core/bit_matrix.hpp"
+#include "bmmpy/core/detail/xorshift64.hpp"
 #include "bmmpy/search/sa_selector.hpp"
 
 #include <algorithm>
@@ -13,36 +14,7 @@
 
 namespace bmmpy::sa_detail {
 
-constexpr std::uint64_t k_default_seed = 0x9E3779B97F4A7C15ull;
 constexpr std::size_t k_word_bits = std::numeric_limits<std::uint64_t>::digits;
-
-class XorShift64 {
-public:
-    explicit XorShift64(std::uint64_t seed) noexcept : _state(seed == 0 ? k_default_seed : seed) {}
-
-    std::uint64_t next_u64() noexcept {
-        std::uint64_t x = _state;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        _state = x;
-        return x;
-    }
-
-    std::size_t next_index(std::size_t upper_bound) noexcept {
-        if (upper_bound == 0)
-            return 0;
-        return static_cast<std::size_t>(next_u64() % upper_bound);
-    }
-
-    double next_unit_double() noexcept {
-        constexpr double k_inv_53 = 1.0 / 9007199254740992.0;
-        return static_cast<double>(next_u64() >> 11) * k_inv_53;
-    }
-
-private:
-    std::uint64_t _state;
-};
 
 struct RestartResult {
     std::vector<std::size_t> rows;
@@ -78,7 +50,7 @@ inline std::uint64_t tail_mask_for_cols(std::size_t cols) noexcept {
 
 inline void initialize_partition(std::size_t row_count,
                                  std::size_t window_size,
-                                 XorShift64& rng,
+                                 detail::XorShift64& rng,
                                  std::vector<std::size_t>& window,
                                  std::vector<std::size_t>& pool) {
     pool.resize(row_count);
@@ -96,11 +68,11 @@ inline void initialize_partition(std::size_t row_count,
 RestartResult run_pairwise_restart(const BitMatrix& matrix,
                                    std::size_t window_size,
                                    const SASelectorConfig& config,
-                                   XorShift64& rng);
+                                   detail::XorShift64& rng);
 
 RestartResult run_higher_order_restart(const BitMatrix& matrix,
                                        std::size_t window_size,
                                        const SASelectorConfig& config,
-                                       XorShift64& rng);
+                                       detail::XorShift64& rng);
 
 } // namespace bmmpy::sa_detail

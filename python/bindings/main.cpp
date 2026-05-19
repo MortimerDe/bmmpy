@@ -13,6 +13,7 @@ NB_MODULE(_bmmpy, m) {
     pyb::bind_bit_matrix(m);
     pyb::bind_algebra(m);
     pyb::bind_candidate(m);
+    pyb::bind_ga(m);
     pyb::bind_search(m);
     pyb::bind_apply(m);
     pyb::bind_runtime(m);
