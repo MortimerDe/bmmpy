@@ -329,6 +329,12 @@ if(BMMPY_BUILD_TESTS)
     )
     set_tests_properties(algebra_core_tests PROPERTIES LABELS "cpp;algebra")
 
+    bmmpy_add_cpp_test(
+        umbrella_header_tests
+        tests/cpp/umbrella_header_tests.cpp
+    )
+    set_tests_properties(umbrella_header_tests PROPERTIES LABELS "cpp;api")
+
     if(BMMPY_BUILD_PYTHON)
         execute_process(
             COMMAND ${Python_EXECUTABLE} -c "import pytest"
