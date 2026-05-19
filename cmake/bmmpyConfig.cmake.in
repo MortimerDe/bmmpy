@@ -1,0 +1,15 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+if(@BMMPY_PACKAGE_NEEDS_OPENMP@)
+    find_dependency(OpenMP REQUIRED COMPONENTS CXX)
+endif()
+
+if(@BMMPY_PACKAGE_NEEDS_CUDA@)
+    find_dependency(CUDAToolkit REQUIRED)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/bmmpyTargets.cmake")
+
+check_required_components(bmmpy)

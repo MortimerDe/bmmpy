@@ -2,9 +2,25 @@ cmake_minimum_required(VERSION 3.15)
 
 project(bmmpy LANGUAGES CXX)
 
-option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" OFF)
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    set(BMMPY_IS_TOP_LEVEL ON)
+else()
+    set(BMMPY_IS_TOP_LEVEL OFF)
+endif()
+
+option(BMMPY_ENABLE_CUDA "Build the optional CUDA backend" ${BMMPY_IS_TOP_LEVEL})
 option(BMMPY_CUDA_STATIC_RUNTIME "Link CUDA runtime statically for CUDA builds" OFF)
-option(BMMPY_BUILD_PYTHON "Build the optional Python bindings" ON)
+option(BMMPY_BUILD_PYTHON "Build the optional Python bindings" ${BMMPY_IS_TOP_LEVEL})
+option(BMMPY_INSTALL "Create install rules for bmmpy" ${BMMPY_IS_TOP_LEVEL})
+
+if(BMMPY_IS_TOP_LEVEL)
+    include(CTest)
+    set(BMMPY_BUILD_TESTS_DEFAULT ${BUILD_TESTING})
+else()
+    set(BMMPY_BUILD_TESTS_DEFAULT OFF)
+endif()
+
+option(BMMPY_BUILD_TESTS "Build the bmmpy test suite" ${BMMPY_BUILD_TESTS_DEFAULT})
 
 # Global project settings
 set(CMAKE_CXX_STANDARD 23)
@@ -16,8 +32,18 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 # Keep the core library PIC-safe so it can be reused from optional shared modules.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-include(CTest)
 include(CheckLanguage)
+include(GNUInstallDirs)
+
+if(BMMPY_BUILD_TESTS)
+    if(BMMPY_IS_TOP_LEVEL AND NOT BUILD_TESTING)
+        enable_testing()
+    elseif(NOT BMMPY_IS_TOP_LEVEL AND NOT BUILD_TESTING)
+        message(FATAL_ERROR
+            "BMMPY_BUILD_TESTS=ON requires the parent project to enable testing before adding bmmpy"
+        )
+    endif()
+endif()
 
 # Project version
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENT)
@@ -29,9 +55,10 @@ endif()
 
 set(BMMPY_VERSION "${CMAKE_MATCH_1}")
 
-
 # Core C++ library
 add_library(bmmpy_core STATIC)
+add_library(bmmpy::core ALIAS bmmpy_core)
+set_target_properties(bmmpy_core PROPERTIES EXPORT_NAME core)
 
 target_sources(
     bmmpy_core
@@ -83,7 +110,8 @@ target_sources(
 target_include_directories(
     bmmpy_core
     PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_compile_definitions(
@@ -91,7 +119,6 @@ target_compile_definitions(
     PUBLIC
         BMMPY_VERSION="${BMMPY_VERSION}"
 )
-
 
 # Optional AVX2 backend
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" BMMPY_ARCH)
@@ -127,17 +154,19 @@ if(BMMPY_ARCH MATCHES "^(x86_64|amd64|i[3-6]86)$")
     endif()
 endif()
 
-
 # Third-party dependencies
+set(BMMPY_PACKAGE_NEEDS_OPENMP OFF)
 find_package(OpenMP)
 
 if(OpenMP_CXX_FOUND)
     target_link_libraries(bmmpy_core PUBLIC OpenMP::OpenMP_CXX)
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_OPENMP=1)
+    set(BMMPY_PACKAGE_NEEDS_OPENMP ON)
 else()
     message(STATUS "OpenMP not found; building without parallel FWHT backend")
 endif()
 
+set(BMMPY_PACKAGE_NEEDS_CUDA OFF)
 if(BMMPY_ENABLE_CUDA)
     check_language(CUDA)
     if(NOT CMAKE_CUDA_COMPILER)
@@ -159,9 +188,9 @@ if(BMMPY_ENABLE_CUDA)
     else()
         target_link_libraries(bmmpy_core PUBLIC CUDA::cudart)
     endif()
-    target_link_directories(bmmpy_core PUBLIC ${CUDAToolkit_LIBRARY_DIR})
-    
+
     target_compile_definitions(bmmpy_core PRIVATE BMMPY_HAS_CUDA_BACKEND=1)
+    set(BMMPY_PACKAGE_NEEDS_CUDA ON)
 else()
     message(STATUS "CUDA backend disabled")
 endif()
@@ -174,7 +203,6 @@ if(BMMPY_BUILD_PYTHON)
     )
 
     add_subdirectory(extern/nanobind)
-
 
     # Python extension module
     nanobind_add_module(
@@ -204,17 +232,62 @@ if(BMMPY_BUILD_PYTHON)
 
     target_link_libraries(_bmmpy PRIVATE bmmpy_core)
 
-    # Install the native module inside the Python package directory.
+    if(BMMPY_INSTALL)
+        # Install the native module inside the Python package directory.
+        install(
+            TARGETS _bmmpy
+            LIBRARY DESTINATION bmmpy
+            RUNTIME DESTINATION bmmpy
+        )
+    endif()
+endif()
+
+if(BMMPY_INSTALL)
+    include(CMakePackageConfigHelpers)
+
     install(
-        TARGETS _bmmpy
-        LIBRARY DESTINATION bmmpy
-        RUNTIME DESTINATION bmmpy
+        TARGETS bmmpy_core
+        EXPORT bmmpyTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    )
+
+    install(
+        DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    )
+
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bmmpyConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/bmmpyConfig.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/bmmpy"
+    )
+
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/bmmpyConfigVersion.cmake"
+        VERSION "${BMMPY_VERSION}"
+        COMPATIBILITY SameMajorVersion
+    )
+
+    install(
+        EXPORT bmmpyTargets
+        FILE bmmpyTargets.cmake
+        NAMESPACE bmmpy::
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/bmmpy"
+    )
+
+    install(
+        FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/bmmpyConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/bmmpyConfigVersion.cmake"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/bmmpy"
     )
 endif()
 
-
 # Tests
-if(BUILD_TESTING)
+if(BMMPY_BUILD_TESTS)
     function(bmmpy_add_cpp_test target)
         add_executable(${target} ${ARGN})
         target_link_libraries(${target} PRIVATE bmmpy_core)

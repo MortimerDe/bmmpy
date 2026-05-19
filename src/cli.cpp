@@ -16,7 +16,6 @@
 
 namespace {
 
-// Загрузка матрицы из текстового файла
 bmmpy::BitMatrix load_matrix_from_file(const std::string& filename) {
     try {
         auto matrix = bmmpy::BitMatrix::load_text(filename);
@@ -32,7 +31,6 @@ bmmpy::BitMatrix load_matrix_from_file(const std::string& filename) {
     }
 }
 
-// Демо-матрица для тестирования
 bmmpy::BitMatrix make_demo_matrix() {
     bmmpy::BitMatrix matrix(4, 8);
     matrix.set(0, 0, true);
@@ -50,7 +48,6 @@ bmmpy::BitMatrix make_demo_matrix() {
     return matrix;
 }
 
-// Печать матрицы
 void print_matrix(const std::string& title, const bmmpy::BitMatrix& matrix) {
     std::println("{} ({}x{}, weight={}):", title, matrix.rows(), matrix.cols(), matrix.weight());
     for (std::size_t r = 0; r < matrix.rows(); ++r) {
@@ -62,7 +59,6 @@ void print_matrix(const std::string& title, const bmmpy::BitMatrix& matrix) {
     }
 }
 
-// Печать Individual
 void print_individual(const bmmpy::ga::Individual& ind, const bmmpy::RowWindow& window) {
     std::println("Individual ({} candidates):", ind.size());
     for (std::size_t i = 0; i < ind.size(); ++i) {
@@ -74,7 +70,6 @@ void print_individual(const bmmpy::ga::Individual& ind, const bmmpy::RowWindow& 
     }
 }
 
-// Применение Individual к матрице через RowWindow
 bmmpy::BitMatrix apply_individual(const bmmpy::BitMatrix& original,
                                   const bmmpy::RowWindow& window,
                                   const bmmpy::ga::Individual& ind) {
@@ -100,7 +95,6 @@ bmmpy::BitMatrix apply_individual(const bmmpy::BitMatrix& original,
     return result;
 }
 
-// Проверка существования файла
 bool file_exists(const std::string& filename) {
     std::ifstream file(filename);
     return file.good();
@@ -108,45 +102,60 @@ bool file_exists(const std::string& filename) {
 
 } // namespace
 
-
 bmmpy::ga::GeneticAlgorithmConfig make_ga_config_for_island(std::size_t island_id,
                                                             std::uint64_t base_seed) {
     bmmpy::ga::GeneticAlgorithmConfig cfg;
 
-    cfg.stop.max_generations = 1000;
-    cfg.stop.max_stale_generations = 1000;
+    cfg.stop.max_generations = 50;
+    cfg.stop.max_stale_generations = 50;
 
     switch (island_id % 4) {
     case 0:
-        cfg.population_size = 50;
+        cfg.population_size = 500;
+        cfg.num_parents = 2;
+        cfg.num_offspring = 1;
         cfg.elite_count = 3;
         cfg.tournament_size = 2;
         cfg.mutation_rate = 0.20;
         cfg.seed = base_seed + 1;
+        cfg.catastrophe_threshold = 30;
+        cfg.catastrophe_survival_rate = 0.8;
         break;
 
     case 1:
-        cfg.population_size = 100;
+        cfg.population_size = 500;
+        cfg.num_parents = 4;
+        cfg.num_offspring = 2;
         cfg.elite_count = 3;
         cfg.tournament_size = 2;
         cfg.mutation_rate = 0.30;
         cfg.seed = base_seed + 2;
+        cfg.catastrophe_threshold = 30;
+        cfg.catastrophe_survival_rate = 0.5;
         break;
 
     case 2:
-        cfg.population_size = 150;
+        cfg.population_size = 500;
+        cfg.num_parents = 2;
+        cfg.num_offspring = 1;
         cfg.elite_count = 4;
         cfg.tournament_size = 3;
         cfg.mutation_rate = 0.45;
         cfg.seed = base_seed + 3;
+        cfg.catastrophe_threshold = 30;
+        cfg.catastrophe_survival_rate = 0.5;
         break;
 
     default:
-        cfg.population_size = 200;
+        cfg.population_size = 500;
+        cfg.num_parents = 10;
+        cfg.num_offspring = 3;
         cfg.elite_count = 2;
         cfg.tournament_size = 10;
         cfg.mutation_rate = 1.0;
         cfg.seed = base_seed + 4;
+        cfg.catastrophe_threshold = 30;
+        cfg.catastrophe_survival_rate = 0.5;
         break;
     }
 
@@ -199,12 +208,13 @@ void print_island_model_snapshot(const bmmpy::ga::IslandModelSnapshot& snapshot)
     std::uint64_t total_evaluations = 0;
 
     std::println("Island model summary:");
-    std::println("  running={} stop_requested={} island_count={} total_generations={} best_score={}",
-                 snapshot.running,
-                 snapshot.stop_requested,
-                 snapshot.island_count,
-                 snapshot.total_generations,
-                 snapshot.best_score);
+    std::println(
+        "  running={} stop_requested={} island_count={} total_generations={} best_score={}",
+        snapshot.running,
+        snapshot.stop_requested,
+        snapshot.island_count,
+        snapshot.total_generations,
+        snapshot.best_score);
 
     for (const auto& island : snapshot.islands) {
         total_evaluations += island.stats.evaluations;
@@ -221,7 +231,6 @@ void print_island_model_snapshot(const bmmpy::ga::IslandModelSnapshot& snapshot)
 
     std::println("  total_evaluations={}", total_evaluations);
 }
-
 
 int main(int argc, char* argv[]) {
     std::println("=== BM-MPY Genetic Algorithm ===\n");
@@ -247,8 +256,6 @@ int main(int argc, char* argv[]) {
         matrix = make_demo_matrix();
     }
 
-    // print_matrix("Original matrix", matrix);
-
     std::vector<std::size_t> row_indices(matrix.rows());
     std::iota(row_indices.begin(), row_indices.end(), 0);
     bmmpy::RowWindow window = matrix.row_window(row_indices);
@@ -266,14 +273,14 @@ int main(int argc, char* argv[]) {
         const bmmpy::ga::IslandModelConfig model_cfg = make_island_model_config();
 
         bmmpy::ga::AlgorithmFactory factory =
-            [base_seed](const bmmpy::ga::IslandSpec& spec) -> std::unique_ptr<bmmpy::ga::Algorithm> {
+            [base_seed](
+                const bmmpy::ga::IslandSpec& spec) -> std::unique_ptr<bmmpy::ga::Algorithm> {
             return std::make_unique<bmmpy::ga::GeneticAlgorithm>(
                 make_ga_config_for_island(spec.island_id, base_seed));
         };
 
         auto channel = std::make_unique<bmmpy::ga::migration::BoundedChannel>(
-            256,
-            bmmpy::ga::migration::OverflowPolicy::DropOldest);
+            256, bmmpy::ga::migration::OverflowPolicy::DropOldest);
 
         bmmpy::ga::IslandModel island_model(model_cfg, std::move(factory), std::move(channel));
 
