@@ -15,60 +15,93 @@
 
 namespace bmmpy::ga {
 
-Individual GeneticAlgorithm::tournament_selection() {
-    std::uniform_int_distribution<std::size_t> distribution(0, _population.size() - 1);
+void GeneticAlgorithm::catastrophe() {
+    std::size_t survivors_count = _population.size() * _config.catastrophe_survival_rate; 
+    
+    std::vector<std::pair<std::size_t, std::size_t>> ranked;
+    for (std::size_t i = 0; i < _population.size(); ++i)
+        ranked.emplace_back(_fitnesses[i], i);
+    std::sort(ranked.begin(), ranked.end());
+    
+    std::vector<Individual> survivors;
+    survivors.reserve(_population.size());
+    for (std::size_t i = 0; i < survivors_count && i < ranked.size(); ++i)
+        survivors.push_back(_population[ranked[i].second]);
 
-    std::size_t best_idx = distribution(_rng);
-    for (std::size_t i = 1; i < _config.tournament_size; ++i) {
-        const std::size_t candidate_idx = distribution(_rng);
-        if (_fitnesses[candidate_idx] < _fitnesses[best_idx])
-            best_idx = candidate_idx;
-    }
-
-    return _population[best_idx];
+    while (survivors.size() < _config.population_size)
+        _population.push_back(make_random());
+    
+    _population = std::move(survivors);
+    
+    for (std::size_t i = 0; i < _population.size(); ++i)
+        _fitnesses[i] = evaluate_individual(_population[i]);
+    
+    _catastrophe = 0;
 }
 
-Individual GeneticAlgorithm::crossover(const Individual& lhs, const Individual& rhs) {
-    const auto crossover_started = internal::steady_clock::now();
-    // std::println("[ga:crossover:start] lhs={} rhs={} elapsed_ms=0", lhs.size(), rhs.size());
+std::vector<Individual> GeneticAlgorithm::tournament_selection() {
+    std::vector<Individual> parents;
+    parents.reserve(_config.num_parents);
+    
+    std::uniform_int_distribution<std::size_t> distribution(0, _population.size() - 1);
+    
+    for (std::size_t p = 0; p < _config.num_parents; ++p) {
+        std::size_t best_idx = distribution(_rng);
+        
+        for (std::size_t t = 1; t < _config.tournament_size; ++t) {
+            const std::size_t candidate_idx = distribution(_rng);
+            if (_fitnesses[candidate_idx] < _fitnesses[best_idx])
+                best_idx = candidate_idx;
+        }
+        
+        parents.push_back(_population[best_idx]);
+    }
+    
+    return parents;
+}
 
+std::vector <Individual> GeneticAlgorithm::crossover(const std::vector<Individual>& parents) {
+    
     std::vector<const Candidate*> pool;
-    pool.reserve(lhs.size() + rhs.size());
-
-    for (const Candidate& candidate : lhs)
-        pool.push_back(&candidate);
-    for (const Candidate& candidate : rhs)
-        pool.push_back(&candidate);
-
-    std::stable_sort(pool.begin(), pool.end(), [](const Candidate* left, const Candidate* right) {
-        if (left->weight != right->weight)
-            return left->weight < right->weight;
-        return left->mask_popcount() < right->mask_popcount();
-    });
-
-    const std::size_t bit_width = lhs.size();
-    ::bmmpy::detail::PivotBasis pivot(bit_width);
-    Individual child;
-    child.reserve(bit_width);
-
-    for (const Candidate* candidate : pool) {
-        if (pivot.try_insert(candidate->mask))
-            child.push_back(*candidate);
-        if (child.size() == bit_width)
-            break;
+    for (const Individual& individual : parents) {
+        pool.reserve(pool.size() + individual.size());
+        for (const Candidate& candidate : individual) {
+            pool.push_back(&candidate);
+        }
     }
+    
+    
+    std::stable_sort(pool.begin(), pool.end(), 
+        [](const Candidate* left, const Candidate* right) {
+            if (left->weight != right->weight)
+                return left->weight < right->weight;
+            return left->mask_popcount() < right->mask_popcount();
+        });
+    
+    const std::size_t bit_width = parents[0].size();
+    std::vector <Individual> offsprings;
+    offsprings.reserve(_config.num_offspring);
 
-    for (std::size_t i = 0; i < bit_width && child.size() < bit_width; ++i) {
-        auto unit_mask = ::bmmpy::detail::make_unit_mask_words(bit_width, i);
-        if (pivot.try_insert(unit_mask))
-            child.push_back(Candidate(std::move(unit_mask), 1));
+    for (std::size_t p = 0; p < _config.num_offspring; ++p) {
+        ::bmmpy::detail::PivotBasis pivot(bit_width);
+        Individual child;
+        child.reserve(bit_width);
+        for (const Candidate* candidate : pool) {
+            if (pivot.try_insert(candidate->mask))
+                child.push_back(*candidate);
+            if (child.size() == bit_width)
+                break;
+        }
+    
+        for (std::size_t i = 0; i < bit_width && child.size() < bit_width; ++i) {
+            auto unit_mask = ::bmmpy::detail::make_unit_mask_words(bit_width, i);
+            if (pivot.try_insert(unit_mask))
+                child.push_back(Candidate(std::move(unit_mask), 1));
+        }
+    
+        offsprings.push_back(child);
     }
-
-    // std::println("[ga:crossover:done] child_size={} rank={} elapsed_ms={}",
-    //              child.size(),
-    //              pivot.rank(),
-    //              internal::elapsed_ms(crossover_started));
-    return child;
+    return offsprings;
 }
 
 
@@ -77,8 +110,6 @@ void GeneticAlgorithm::mutate(Individual& ind) {
     const std::size_t candidate_count = ind.size();
 
     if (candidate_count < 2) {
-        // std::println("[ga:mutate:start] n=0 rows={} elapsed_ms=0", candidate_count);
-        // std::println("[ga:mutate:done] n=0 elapsed_ms={}", internal::elapsed_ms(mutate_started));
         return;
     }
 
@@ -93,32 +124,20 @@ void GeneticAlgorithm::mutate(Individual& ind) {
         scratch_words = scratch_storage.row_words(0);
     }
 
-    // std::println("[ga:mutate:start] n={} rows={} elapsed_ms=0", mutation_count, candidate_count);
-
     for (std::size_t k = 0; k < mutation_count; ++k) {
         const std::size_t i = distribution(_rng);
         const std::size_t j = distribution(_rng);
         if (i == j)
             continue;
 
-        // std::println("[ga:mutate:iter:start] iter={} i={} j={} elapsed_ms={}",
-                     // k,
-                     // i,
-                     // j,
-                     // internal::elapsed_ms(mutate_started));
-
         for (std::size_t w = 0; w < ind[i].mask.size(); ++w)
             ind[i].mask[w] ^= ind[j].mask[w];
 
         ind[i].weight = internal::eval_cand_weight(*_window, _N, _M, ind[i], scratch_words);
 
-        // std::println(
-            // "[ga:mutate:iter:done] iter={} elapsed_ms={}", k, internal::elapsed_ms(mutate_started));
     }
 
-    // std::println("[ga:mutate:done] n={} elapsed_ms={}",
-    //              mutation_count,
-    //              internal::elapsed_ms(mutate_started));
+
 }
 
 void GeneticAlgorithm::local_improvement(Individual& ind) {
