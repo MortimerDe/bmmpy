@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bmmpy/core/detail/xorshift64.hpp"
 #include "bmmpy/core/row_window.hpp"
 #include "bmmpy/ga/algorithm.hpp"
 #include "bmmpy/ga/types.hpp"
@@ -10,6 +11,8 @@
 #include <vector>
 
 namespace bmmpy::ga {
+
+enum class LocalImprStrategy { DISABLED, GREEDY, FWHT, CUDA_FWHT, BRUTE, CUDA_BRUTE };
 
 struct GeneticAlgorithmConfig {
     std::size_t population_size = 300;
@@ -74,7 +77,7 @@ private:
     std::vector<std::size_t> _fitnesses;
 
     std::size_t _no_improvement = 0;
-    std::mt19937 _rng;
+    detail::XorShift64 _rng;
 };
 
 } // namespace bmmpy::ga

@@ -1,5 +1,4 @@
 #include "bmmpy/ga/genetic_algorithm.hpp"
-
 #include "bmmpy/ga/genetic_algorithm_internal.hpp"
 
 #include <algorithm>
@@ -29,7 +28,7 @@ void GeneticAlgorithm::initialize(const RowWindow& window) {
             "GeneticAlgorithm::initialize: population_size must be greater than zero");
     }
 
-    _rng.seed(_config.seed);
+    _rng.reseed(_config.seed);
 
     _population.clear();
     _population.reserve(_config.population_size);
@@ -77,7 +76,8 @@ std::vector<Individual> GeneticAlgorithm::export_migrants(std::size_t max_count)
     if (max_count == 0 || _best_individual.empty())
         return {};
 
-    // std::print("exporting migrant: {} {} {}\n", _best_score, _stats.generations, _stats.stale_generations);
+    // std::print("exporting migrant: {} {} {}\n", _best_score, _stats.generations,
+    // _stats.stale_generations);
     return {_best_individual};
 }
 
@@ -99,14 +99,15 @@ void GeneticAlgorithm::import_migrants(std::vector<Individual> migrants) {
         _no_improvement = 0;
 
         auto worst = std::max_element(_fitnesses.begin(), _fitnesses.end());
-        const std::size_t worst_idx = static_cast<std::size_t>(
-            std::distance(_fitnesses.begin(), worst));
+        const std::size_t worst_idx =
+            static_cast<std::size_t>(std::distance(_fitnesses.begin(), worst));
 
         _population[worst_idx] = _best_individual;
         _fitnesses[worst_idx] = score;
     }
 
-    // std::print("import migrants: {} {} {}\n", _best_score, _stats.generations, _stats.stale_generations);
+    // std::print("import migrants: {} {} {}\n", _best_score, _stats.generations,
+    // _stats.stale_generations);
     _done = internal::should_stop(_config, _stats, _best_score);
 }
 
@@ -136,10 +137,10 @@ void GeneticAlgorithm::step() {
     for (std::size_t i = 0; i < _config.elite_count && i < ranked.size(); ++i)
         new_population.push_back(_population[ranked[i].second]);
 
-    std::uniform_real_distribution<double> probability(0.0, 1.0);
+    // std::uniform_real_distribution<double> probability(0.0, 1.0);
 
     while (new_population.size() < _config.population_size) {
-        if (_no_improvement > k_restart_after && probability(_rng) < k_restart_probability) {
+        if (_no_improvement > k_restart_after && _rng.next_unit_double() < k_restart_probability) {
             new_population.push_back(make_random());
             continue;
         }
@@ -167,8 +168,7 @@ void GeneticAlgorithm::step() {
     ++_stats.generations;
 
     auto best = std::min_element(_fitnesses.begin(), _fitnesses.end());
-    const std::size_t best_idx =
-        static_cast<std::size_t>(std::distance(_fitnesses.begin(), best));
+    const std::size_t best_idx = static_cast<std::size_t>(std::distance(_fitnesses.begin(), best));
 
     if (*best < _best_score) {
         _best_score = *best;

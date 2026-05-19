@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <print>
-#include <random>
 
 namespace bmmpy::ga {
 
@@ -21,11 +20,10 @@ Individual GeneticAlgorithm::make_identity() const {
 Individual GeneticAlgorithm::make_random() {
     const auto random_started = internal::steady_clock::now();
     Individual individual = make_identity();
-    std::uniform_int_distribution<std::size_t> distribution(0, _N - 1);
 
     for (std::size_t k = 0; k < _N * 3; ++k) {
-        const std::size_t i = distribution(_rng);
-        const std::size_t j = distribution(_rng);
+        const std::size_t i = _rng.next_index(_N);
+        const std::size_t j = _rng.next_index(_N);
         if (i == j)
             continue;
 
@@ -83,6 +81,5 @@ Individual GeneticAlgorithm::make_heuristic() {
 
     return individual;
 }
-
 
 } // namespace bmmpy::ga

@@ -1,26 +1,21 @@
-#include "bmmpy/ga/genetic_algorithm.hpp"
-
-#include "bmmpy/ga/genetic_algorithm_internal.hpp"
-
 #include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/core/detail/xor_basis.hpp"
+#include "bmmpy/ga/genetic_algorithm.hpp"
+#include "bmmpy/ga/genetic_algorithm_internal.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <print>
-#include <random>
 #include <utility>
 #include <vector>
 
 namespace bmmpy::ga {
 
 Individual GeneticAlgorithm::tournament_selection() {
-    std::uniform_int_distribution<std::size_t> distribution(0, _population.size() - 1);
-
-    std::size_t best_idx = distribution(_rng);
+    std::size_t best_idx = _rng.next_index(_population.size());
     for (std::size_t i = 1; i < _config.tournament_size; ++i) {
-        const std::size_t candidate_idx = distribution(_rng);
+        const std::size_t candidate_idx = _rng.next_index(_population.size());
         if (_fitnesses[candidate_idx] < _fitnesses[best_idx])
             best_idx = candidate_idx;
     }
@@ -71,7 +66,6 @@ Individual GeneticAlgorithm::crossover(const Individual& lhs, const Individual& 
     return child;
 }
 
-
 void GeneticAlgorithm::mutate(Individual& ind) {
     const auto mutate_started = internal::steady_clock::now();
     const std::size_t candidate_count = ind.size();
@@ -84,7 +78,6 @@ void GeneticAlgorithm::mutate(Individual& ind) {
 
     const std::size_t mutation_count =
         std::max<std::size_t>(1, static_cast<std::size_t>(candidate_count * _config.mutation_rate));
-    std::uniform_int_distribution<std::size_t> distribution(0, candidate_count - 1);
 
     ::bmmpy::BitMatrix scratch_storage;
     std::uint64_t* scratch_words = nullptr;
@@ -96,16 +89,16 @@ void GeneticAlgorithm::mutate(Individual& ind) {
     // std::println("[ga:mutate:start] n={} rows={} elapsed_ms=0", mutation_count, candidate_count);
 
     for (std::size_t k = 0; k < mutation_count; ++k) {
-        const std::size_t i = distribution(_rng);
-        const std::size_t j = distribution(_rng);
+        const std::size_t i = _rng.next_index(candidate_count);
+        const std::size_t j = _rng.next_index(candidate_count);
         if (i == j)
             continue;
 
         // std::println("[ga:mutate:iter:start] iter={} i={} j={} elapsed_ms={}",
-                     // k,
-                     // i,
-                     // j,
-                     // internal::elapsed_ms(mutate_started));
+        // k,
+        // i,
+        // j,
+        // internal::elapsed_ms(mutate_started));
 
         for (std::size_t w = 0; w < ind[i].mask.size(); ++w)
             ind[i].mask[w] ^= ind[j].mask[w];
@@ -113,7 +106,7 @@ void GeneticAlgorithm::mutate(Individual& ind) {
         ind[i].weight = internal::eval_cand_weight(*_window, _N, _M, ind[i], scratch_words);
 
         // std::println(
-            // "[ga:mutate:iter:done] iter={} elapsed_ms={}", k, internal::elapsed_ms(mutate_started));
+        // "[ga:mutate:iter:done] iter={} elapsed_ms={}", k, internal::elapsed_ms(mutate_started));
     }
 
     // std::println("[ga:mutate:done] n={} elapsed_ms={}",
