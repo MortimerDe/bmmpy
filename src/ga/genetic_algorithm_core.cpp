@@ -1,7 +1,6 @@
+#include "bmmpy/core/bit_matrix.hpp"
 #include "bmmpy/ga/genetic_algorithm.hpp"
 #include "bmmpy/ga/genetic_algorithm_internal.hpp"
-
-#include "bmmpy/core/bit_matrix.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -17,7 +16,6 @@ std::size_t GeneticAlgorithm::evaluate_individual(const Individual& ind) const {
 
 void GeneticAlgorithm::recalc_all_weights(Individual& ind) {
     const auto recalc_started = internal::steady_clock::now();
-    // std::println("[ga:recalc:start] candidates={} rows={} cols={}", ind.size(), _N, _M);
 
     ::bmmpy::BitMatrix scratch_storage;
     std::uint64_t* scratch_words = nullptr;
@@ -29,17 +27,7 @@ void GeneticAlgorithm::recalc_all_weights(Individual& ind) {
 
     for (Candidate& candidate : ind) {
         candidate.weight = internal::eval_cand_weight(*_window, _N, _M, candidate, scratch_words);
-
-        // const std::size_t candidate_idx = static_cast<std::size_t>(&candidate - ind.data());
-        // std::println("[ga:recalc:candidate] idx={} weight={} elapsed_ms={}",
-        //              candidate_idx,
-        //              candidate.weight,
-        //              internal::elapsed_ms(recalc_started));
     }
-
-    // std::println("[ga:recalc:done] candidates={} elapsed_ms={}",
-    //              ind.size(),
-    //              internal::elapsed_ms(recalc_started));
 }
 
 void GeneticAlgorithm::adapt_mutation_rate() {

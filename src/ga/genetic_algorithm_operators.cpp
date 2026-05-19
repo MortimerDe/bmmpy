@@ -40,13 +40,11 @@ std::vector<Individual> GeneticAlgorithm::tournament_selection() {
     std::vector<Individual> parents;
     parents.reserve(_config.num_parents);
 
-    std::uniform_int_distribution<std::size_t> distribution(0, _population.size() - 1);
-
     for (std::size_t p = 0; p < _config.num_parents; ++p) {
-        std::size_t best_idx = distribution(_rng);
+        std::size_t best_idx = _rng.next_index(_population.size());
 
         for (std::size_t t = 1; t < _config.tournament_size; ++t) {
-            const std::size_t candidate_idx = distribution(_rng);
+            const std::size_t candidate_idx = _rng.next_index(_population.size());
             if (_fitnesses[candidate_idx] < _fitnesses[best_idx])
                 best_idx = candidate_idx;
         }

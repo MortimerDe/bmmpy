@@ -85,7 +85,6 @@ private:
     std::size_t _no_improvement = 0;
     detail::XorShift64 _rng;
     std::size_t _catastrophe = 0;
-    std::mt19937 _rng;
 };
 
 } // namespace bmmpy::ga

@@ -135,8 +135,6 @@ void GeneticAlgorithm::step() {
     for (std::size_t i = 0; i < _config.elite_count && i < ranked.size(); ++i)
         new_population.push_back(_population[ranked[i].second]);
 
-    // std::uniform_real_distribution<double> probability(0.0, 1.0);
-
     while (new_population.size() < _config.population_size) {
         if (_no_improvement > k_restart_after && _rng.next_unit_double() < k_restart_probability) {
             new_population.push_back(make_random());
