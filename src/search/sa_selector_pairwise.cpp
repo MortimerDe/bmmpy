@@ -1,4 +1,5 @@
 #include "bmmpy/core/detail/bit_ops.hpp"
+#include "bmmpy/core/detail/xorshift64.hpp"
 #include "bmmpy/search/sa_selector_internal.hpp"
 
 #include <cmath>
@@ -83,7 +84,7 @@ double estimate_initial_temperature(const std::vector<std::size_t>& window,
                                     const std::vector<std::size_t>& pool,
                                     const PairwiseSynergyTable& table,
                                     const SASelectorConfig& config,
-                                    XorShift64& rng) {
+                                    detail::XorShift64& rng) {
     if (pool.empty())
         return 1.0;
 
@@ -116,7 +117,7 @@ double estimate_initial_temperature(const std::vector<std::size_t>& window,
 RestartResult run_pairwise_restart(const BitMatrix& matrix,
                                    std::size_t window_size,
                                    const SASelectorConfig& config,
-                                   XorShift64& rng) {
+                                   detail::XorShift64& rng) {
     const PairwiseSynergyTable table = build_pairwise_synergy_table(matrix);
 
     std::vector<std::size_t> window;

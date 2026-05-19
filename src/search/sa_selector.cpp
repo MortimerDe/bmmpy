@@ -1,5 +1,6 @@
 #include "bmmpy/search/sa_selector.hpp"
 
+#include "bmmpy/core/detail/xorshift64.hpp"
 #include "bmmpy/search/sa_selector_internal.hpp"
 
 #include <stdexcept>
@@ -27,7 +28,7 @@ SASelectionResult SASelector::select(const BitMatrix& matrix, std::size_t window
     }
 
     SASelectionResult out;
-    out.seed = (_config.seed == 0 ? sa_detail::k_default_seed : _config.seed);
+    out.seed = (_config.seed == 0 ? detail::k_default_xorshift64_seed : _config.seed);
 
     if (window_size == 0)
         return out;
@@ -39,7 +40,7 @@ SASelectionResult SASelector::select(const BitMatrix& matrix, std::size_t window
         throw std::invalid_argument("SASelector: unsupported cooling policy");
     }
 
-    sa_detail::XorShift64 rng(out.seed);
+    detail::XorShift64 rng(out.seed);
     bool has_best = false;
 
     auto consider_candidate = [&](const sa_detail::RestartResult& candidate, std::size_t restart) {
