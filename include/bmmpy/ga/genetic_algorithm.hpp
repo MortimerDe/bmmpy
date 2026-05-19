@@ -14,7 +14,12 @@ namespace bmmpy::ga {
 struct GeneticAlgorithmConfig {
     std::size_t population_size = 300;
     std::size_t elite_count = 3;
+    std::size_t num_parents = 2;
+    std::size_t num_offspring = 1;
     std::size_t tournament_size = 3;
+    bool enable_catastrophe = false;
+    std::size_t catastrophe_threshold = 30;
+    double catastrophe_survival_rate = 0.2;
     double mutation_rate = 0.3;
     StopCriteria stop;
     std::uint64_t seed = 0;
@@ -49,8 +54,9 @@ private:
     void adapt_mutation_rate();
 
     // Operators
-    Individual tournament_selection();
-    Individual crossover(const Individual& a, const Individual& b);
+    void catastrophe();
+    std::vector <Individual> tournament_selection();
+    std::vector <Individual> crossover(const std::vector <Individual>& parents);
     void mutate(Individual& ind);
     void local_improvement(Individual& ind);
 
@@ -74,6 +80,7 @@ private:
     std::vector<std::size_t> _fitnesses;
 
     std::size_t _no_improvement = 0;
+    std::size_t _catastrophe = 0;
     std::mt19937 _rng;
 };
 
