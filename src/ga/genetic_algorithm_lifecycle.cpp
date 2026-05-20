@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <print>
+// #include <print>
 #include <random>
 #include <stdexcept>
 #include <utility>
@@ -182,7 +182,7 @@ void GeneticAlgorithm::step() {
     }
 
     if (!_config.enable_catastrophe && _catastrophe == _config.catastrophe_threshold) {
-        std::println("Catastrophe! No improvement for {} generations", _no_improvement);
+        // std::println("Catastrophe! No improvement for {} generations", _no_improvement);
         catastrophe();
         auto new_best = std::min_element(_fitnesses.begin(), _fitnesses.end());
         if (*new_best < _best_score) {
