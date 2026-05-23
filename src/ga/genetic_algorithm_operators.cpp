@@ -26,7 +26,7 @@ void GeneticAlgorithm::catastrophe() {
         survivors.push_back(_population[ranked[i].second]);
 
     while (survivors.size() < _config.population_size)
-        _population.push_back(make_random());
+        survivors.push_back(make_random());
 
     _population = std::move(survivors);
 

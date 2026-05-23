@@ -181,7 +181,7 @@ void GeneticAlgorithm::step() {
         ++_catastrophe;
     }
 
-    if (!_config.enable_catastrophe && _catastrophe == _config.catastrophe_threshold) {
+    if (_config.enable_catastrophe && _catastrophe == _config.catastrophe_threshold) {
         // std::println("Catastrophe! No improvement for {} generations", _no_improvement);
         catastrophe();
         auto new_best = std::min_element(_fitnesses.begin(), _fitnesses.end());

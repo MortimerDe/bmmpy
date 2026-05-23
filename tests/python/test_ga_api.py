@@ -34,6 +34,11 @@ def make_native_ga_config(seed: int) -> bmm.ga.GeneticAlgorithmConfig:
     config.elite_count = 2
     config.tournament_size = 2
     config.mutation_rate = 0.25
+    config.num_parents = 2
+    config.num_offspring = 1
+    config.enable_catastrophe = True
+    config.catastrophe_threshold = 2
+    config.catastrophe_survival_rate = 0.5
 
     stop = bmm.StopCriteria()
     stop.max_generations = 4
@@ -55,6 +60,11 @@ class TestGaApi(unittest.TestCase):
             max_generations=4,
             max_stale_generations=4,
             seed=7,
+            num_parents=2,
+            num_offspring=1,
+            enable_catastrophe=True,
+            catastrophe_threshold=2,
+            catastrophe_survival_rate=0.5,
         )
 
         ga.initialize(matrix.row_window([0, 1, 2, 3]))
@@ -71,6 +81,11 @@ class TestGaApi(unittest.TestCase):
         self.assertEqual(stats.generations, ga.generation())
         self.assertGreater(stats.evaluations, 0)
         self.assertEqual(stats.seed, 7)
+        self.assertEqual(ga.num_parents, 2)
+        self.assertEqual(ga.num_offspring, 1)
+        self.assertTrue(ga.enable_catastrophe)
+        self.assertEqual(ga.catastrophe_threshold, 2)
+        self.assertEqual(ga.catastrophe_survival_rate, 0.5)
 
     def test_island_model_wrapper(self) -> None:
         matrix = make_ga_matrix()

@@ -134,6 +134,11 @@ void bind_ga(nb::module_& m) {
         .def_rw("population_size", &ga::GeneticAlgorithmConfig::population_size)
         .def_rw("elite_count", &ga::GeneticAlgorithmConfig::elite_count)
         .def_rw("tournament_size", &ga::GeneticAlgorithmConfig::tournament_size)
+        .def_rw("num_parents", &ga::GeneticAlgorithmConfig::num_parents)
+        .def_rw("num_offspring", &ga::GeneticAlgorithmConfig::num_offspring)
+        .def_rw("enable_catastrophe", &ga::GeneticAlgorithmConfig::enable_catastrophe)
+        .def_rw("catastrophe_threshold", &ga::GeneticAlgorithmConfig::catastrophe_threshold)
+        .def_rw("catastrophe_survival_rate", &ga::GeneticAlgorithmConfig::catastrophe_survival_rate)
         .def_rw("mutation_rate", &ga::GeneticAlgorithmConfig::mutation_rate)
         .def_rw("stop", &ga::GeneticAlgorithmConfig::stop)
         .def_rw("seed", &ga::GeneticAlgorithmConfig::seed);

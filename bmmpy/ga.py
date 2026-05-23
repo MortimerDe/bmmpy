@@ -60,6 +60,11 @@ def _build_ga_config(
     population_size: int,
     elite_count: int,
     tournament_size: int,
+    num_parents: int,
+    num_offspring: int,
+    enable_catastrophe: bool,
+    catastrophe_threshold: int,
+    catastrophe_survival_rate: float,
     mutation_rate: float,
     max_generations: int | None,
     max_stale_generations: int | None,
@@ -70,6 +75,11 @@ def _build_ga_config(
     config.population_size = population_size
     config.elite_count = elite_count
     config.tournament_size = tournament_size
+    config.num_parents = num_parents
+    config.num_offspring = num_offspring
+    config.enable_catastrophe = enable_catastrophe
+    config.catastrophe_threshold = catastrophe_threshold
+    config.catastrophe_survival_rate = catastrophe_survival_rate
     config.mutation_rate = mutation_rate
     config.stop = _build_stop_criteria(
         max_generations=max_generations,
@@ -85,6 +95,11 @@ def _clone_ga_config(config: GeneticAlgorithmConfig) -> GeneticAlgorithmConfig:
     clone.population_size = config.population_size
     clone.elite_count = config.elite_count
     clone.tournament_size = config.tournament_size
+    clone.num_parents = config.num_parents
+    clone.num_offspring = config.num_offspring
+    clone.enable_catastrophe = config.enable_catastrophe
+    clone.catastrophe_threshold = config.catastrophe_threshold
+    clone.catastrophe_survival_rate = config.catastrophe_survival_rate
     clone.mutation_rate = config.mutation_rate
     clone.stop = _clone_stop_criteria(config.stop)
     clone.seed = config.seed
@@ -119,6 +134,11 @@ def _common_ga_kwargs_are_default(
     population_size: int,
     elite_count: int,
     tournament_size: int,
+    num_parents: int,
+    num_offspring: int,
+    enable_catastrophe: bool,
+    catastrophe_threshold: int,
+    catastrophe_survival_rate: float,
     mutation_rate: float,
     max_generations: int | None,
     max_stale_generations: int | None,
@@ -130,6 +150,11 @@ def _common_ga_kwargs_are_default(
         population_size == 300
         and elite_count == 3
         and tournament_size == 3
+        and num_parents == 2
+        and num_offspring == 1
+        and enable_catastrophe is False
+        and catastrophe_threshold == 30
+        and catastrophe_survival_rate == 0.2
         and mutation_rate == 0.3
         and max_generations is None
         and max_stale_generations is None
@@ -152,6 +177,11 @@ class GeneticAlgorithm:
         "population_size",
         "elite_count",
         "tournament_size",
+        "num_parents",
+        "num_offspring",
+        "enable_catastrophe",
+        "catastrophe_threshold",
+        "catastrophe_survival_rate",
         "mutation_rate",
         "max_generations",
         "max_stale_generations",
@@ -166,6 +196,11 @@ class GeneticAlgorithm:
         population_size: int = 300,
         elite_count: int = 3,
         tournament_size: int = 3,
+        num_parents: int = 2,
+        num_offspring: int = 1,
+        enable_catastrophe: bool = False,
+        catastrophe_threshold: int = 30,
+        catastrophe_survival_rate: float = 0.2,
         mutation_rate: float = 0.3,
         max_generations: int | None = None,
         max_stale_generations: int | None = None,
@@ -175,6 +210,11 @@ class GeneticAlgorithm:
         self.population_size = population_size
         self.elite_count = elite_count
         self.tournament_size = tournament_size
+        self.num_parents = num_parents
+        self.num_offspring = num_offspring
+        self.enable_catastrophe = enable_catastrophe
+        self.catastrophe_threshold = catastrophe_threshold
+        self.catastrophe_survival_rate = catastrophe_survival_rate
         self.mutation_rate = mutation_rate
         self.max_generations = max_generations
         self.max_stale_generations = max_stale_generations
@@ -185,6 +225,11 @@ class GeneticAlgorithm:
             population_size=population_size,
             elite_count=elite_count,
             tournament_size=tournament_size,
+            num_parents=num_parents,
+            num_offspring=num_offspring,
+            enable_catastrophe=enable_catastrophe,
+            catastrophe_threshold=catastrophe_threshold,
+            catastrophe_survival_rate=catastrophe_survival_rate,
             mutation_rate=mutation_rate,
             max_generations=max_generations,
             max_stale_generations=max_stale_generations,
@@ -199,11 +244,16 @@ class GeneticAlgorithm:
             f"population_size={self.population_size}, "
             f"elite_count={self.elite_count}, "
             f"tournament_size={self.tournament_size}, "
+            f"num_parents={self.num_parents}, "
+            f"num_offspring={self.num_offspring}, "
+            f"enable_catastrophe={self.enable_catastrophe}, "
+            f"catastrophe_threshold={self.catastrophe_threshold}, "
+            f"catastrophe_survival_rate={self.catastrophe_survival_rate})"
             f"mutation_rate={self.mutation_rate}, "
             f"max_generations={self.max_generations}, "
             f"max_stale_generations={self.max_stale_generations}, "
             f"target_total_weight={self.target_total_weight}, "
-            f"seed={self.seed})"
+            f"seed={self.seed}, "
         )
 
     def name(self) -> str:
@@ -258,6 +308,11 @@ class IslandModel:
         population_size: int = 300,
         elite_count: int = 3,
         tournament_size: int = 3,
+        num_parents: int = 2,
+        num_offspring: int = 1,
+        enable_catastrophe: bool = False,
+        catastrophe_threshold: int = 30,
+        catastrophe_survival_rate: float = 0.2,
         mutation_rate: float = 0.3,
         max_generations: int | None = None,
         max_stale_generations: int | None = None,
@@ -284,6 +339,11 @@ class IslandModel:
                 population_size=population_size,
                 elite_count=elite_count,
                 tournament_size=tournament_size,
+                num_parents=num_parents,
+                num_offspring=num_offspring,
+                enable_catastrophe=enable_catastrophe,
+                catastrophe_threshold=catastrophe_threshold,
+                catastrophe_survival_rate=catastrophe_survival_rate,
                 mutation_rate=mutation_rate,
                 max_generations=max_generations,
                 max_stale_generations=max_stale_generations,
@@ -301,6 +361,11 @@ class IslandModel:
                     population_size=population_size,
                     elite_count=elite_count,
                     tournament_size=tournament_size,
+                    num_parents=num_parents,
+                    num_offspring=num_offspring,
+                    enable_catastrophe=enable_catastrophe,
+                    catastrophe_threshold=catastrophe_threshold,
+                    catastrophe_survival_rate=catastrophe_survival_rate,
                     mutation_rate=mutation_rate,
                     max_generations=max_generations,
                     max_stale_generations=max_stale_generations,
